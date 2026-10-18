@@ -110,7 +110,9 @@ export default async function (pi: ExtensionAPI) {
 	pi.registerProvider('adverserial-confidential', {
 		name: 'Adverserial Confidential',
 		baseUrl: gatewayURL(),
-		apiKey: '$ADVERSERIAL_API_KEY',
+		// Pi passes this field through verbatim; an env-variable-looking string
+		// would become the credential itself and correctly fail at the gateway.
+		apiKey: process.env.ADVERSERIAL_API_KEY || '',
 		api: 'openai-completions',
 		models: [{
 			id: modelID(),
