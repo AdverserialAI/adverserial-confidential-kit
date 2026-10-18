@@ -49,12 +49,24 @@ pointing at the build output:
 export { AdverserialPlugin as default } from "/absolute/path/to/adverserial-sdk/plugins/opencode/dist/plugins/opencode/src/index.js"
 ```
 
-The dist tree is self-contained except for `@opencode-ai/plugin`, which
-opencode resolves for plugin modules; if your setup loads the file outside
-opencode's plugin loader, add a `package.json` next to your opencode config
-with `"dependencies": { "@opencode-ai/plugin": "*" }` (opencode runs
-`bun install` for it at startup) and keep `adverserial-sdk/plugins/node_modules`
-in place.
+The plugin needs its OpenCode helper plus the bundled verifier's EHBP and DCAP
+dependencies. Add this `package.json` next to the OpenCode config (OpenCode
+runs `bun install` for it at startup):
+
+```json
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opencode-ai/plugin": "*",
+    "@phala/dcap-qvl": "0.6.5",
+    "ehbp": "0.3.3"
+  }
+}
+```
+
+`ack code opencode` writes this configuration and the locally resolved plugin
+copy automatically.
 
 ## Usage inside a session
 
