@@ -104,6 +104,25 @@ def canonical_model_id(model: str) -> str:
     raise ClientRequestError("Use a canonical confidential model ID: lordx64/cyberglm or lordx64/cyberkimi.")
 
 
+def requested_output_tokens(payload: Mapping[str, Any]) -> int:
+    """Normalize OpenAI's legacy and current Chat Completions output limits.
+
+    Recent OpenAI-compatible clients, including Pi, send
+    ``max_completion_tokens``. The confidential entitlement and forwarded
+    runtime request must use one identical ``max_tokens`` value. Forwarding
+    both lets an unbound value reach the runtime and makes its entitlement gate
+    reject the request. Conflicting aliases therefore fail closed.
+    """
+    legacy = payload.get("max_tokens")
+    current = payload.get("max_completion_tokens")
+    for name, value in (("max_tokens", legacy), ("max_completion_tokens", current)):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+            raise ClientRequestError(f"{name} must be a positive integer")
+    if legacy is not None and current is not None and legacy != current:
+        raise ClientRequestError("max_tokens and max_completion_tokens must match when both are provided")
+    return current if current is not None else (legacy if legacy is not None else 4096)
+
+
 @dataclass
 class ProofCache:
     proof: VerifiedProof | None = None
@@ -195,9 +214,7 @@ class Dispatcher:
         max_input = 2 * len(serialized) + 4096
         if not 1 <= max_input <= self.config.max_input_tokens:
             raise ClientRequestError(f"Request exceeds the confidential input policy: {max_input} bytes reserved (limit {self.config.max_input_tokens}).")
-        requested_output = payload.get("max_tokens", 4096)
-        if isinstance(requested_output, bool) or not isinstance(requested_output, int) or requested_output < 1:
-            raise ClientRequestError("max_tokens must be a positive integer")
+        requested_output = requested_output_tokens(payload)
         max_output = min(requested_output, self.config.max_output_tokens)
         proof = self.proof_for(model)
         entitlement = self.entitlement(api_key, model, max_input, max_output, proof)
@@ -212,6 +229,9 @@ class Dispatcher:
         outbound = dict(payload)
         outbound.pop("model", None)
         stream = bool(outbound.pop("stream", False))
+        # This modern client alias must not reach the runtime beside the
+        # entitlement-bound value below.
+        outbound.pop("max_completion_tokens", None)
         outbound["max_tokens"] = max_output
         session = VerifiedSession(self.config.cc_api_url, proof=proof, entitlement=entitlement, timeout=600)
         try:

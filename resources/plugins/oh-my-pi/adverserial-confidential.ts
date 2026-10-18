@@ -110,8 +110,8 @@ export default async function (pi: ExtensionAPI) {
 	pi.registerProvider('adverserial-confidential', {
 		name: 'Adverserial Confidential',
 		baseUrl: gatewayURL(),
-		// Oh My Pi passes this field through verbatim; resolve the local credential
-		// before provider registration rather than sending an env-variable literal.
+		// Use the ACK-launched process environment; this avoids persisting a
+		// customer credential in an extension or provider configuration.
 		apiKey: process.env.ADVERSERIAL_API_KEY || '',
 		api: 'openai-completions',
 		models: [{

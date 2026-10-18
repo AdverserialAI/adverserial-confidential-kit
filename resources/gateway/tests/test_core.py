@@ -86,6 +86,30 @@ class CoreTests(unittest.TestCase):
         self.assertIs(result, stream)
         self.assertTrue(session.return_value.chat_completions.call_args.kwargs["stream"])
 
+    def test_modern_max_completion_tokens_is_bound_and_normalized_before_dispatch(self):
+        proof = object()
+        payload = {
+            "model": "lordx64/cyberglm",
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_completion_tokens": 73,
+        }
+        with patch.object(self.dispatcher, "proof_for", return_value=proof), patch.object(
+            self.dispatcher, "entitlement", return_value="signed-entitlement"
+        ) as entitlement, patch("adverserial_gateway.core.VerifiedSession") as session:
+            session.return_value.chat_completions.return_value = {"id": "ok"}
+            self.dispatcher.completion("sk-" + "x" * 24, payload)
+        self.assertEqual(entitlement.call_args.args[3], 73)
+        kwargs = session.return_value.chat_completions.call_args.kwargs
+        self.assertEqual(kwargs["max_tokens"], 73)
+        self.assertNotIn("max_completion_tokens", kwargs)
+
+    def test_conflicting_output_limit_aliases_fail_closed(self):
+        with self.assertRaises(ClientRequestError):
+            self.dispatcher.completion(
+                "sk-" + "x" * 24,
+                {"model": "lordx64/cyberglm", "messages": [], "max_tokens": 12, "max_completion_tokens": 13},
+            )
+
     def _completion_failure(self, exc, dispatched):
         payload = {"model": "lordx64/cyberglm", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
         with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(

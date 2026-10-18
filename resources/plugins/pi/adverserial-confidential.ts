@@ -110,8 +110,8 @@ export default async function (pi: ExtensionAPI) {
 	pi.registerProvider('adverserial-confidential', {
 		name: 'Adverserial Confidential',
 		baseUrl: gatewayURL(),
-		// Pi passes this field through verbatim; an env-variable-looking string
-		// would become the credential itself and correctly fail at the gateway.
+		// Resolve from the short-lived process environment. This Pi release does
+		// not resolve ProviderConfig's $ENV interpolation during extension setup.
 		apiKey: process.env.ADVERSERIAL_API_KEY || '',
 		api: 'openai-completions',
 		models: [{
