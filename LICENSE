@@ -1,3 +1,42 @@
-Adverserial Confidential Kit is proprietary source-available software.
-Copyright (c) 2026 Adverserial AI LLC. See the repository-level LICENSE and
-LICENSING.md for the governing terms.
+# Adverserial Proprietary License
+
+Copyright (c) 2026 Adverserial AI LLC. All rights reserved.
+
+## 1. Ownership
+
+The software, source code, documentation, configuration, designs, and other
+materials in this repository (collectively, the "Software") are proprietary to
+Adverserial AI LLC and its licensors.
+
+## 2. No license grant
+
+Except under a separate written agreement signed by an authorized
+representative of Adverserial AI LLC, no license or other right is granted to
+use, copy, reproduce, modify, merge, publish, distribute, sublicense, sell,
+lease, host, operate, create derivative works from, or otherwise exploit the
+Software.
+
+Making source code available in this repository does not make the Software open
+source and does not grant permission to use it in production, redistribute it,
+or use it to build, offer, or support a competing product or service.
+
+## 3. Third-party components
+
+Third-party components remain subject to their own license terms. Those terms
+are identified in this repository's dependency manifests and, where present,
+`THIRD_PARTY_NOTICES.md`. Nothing in this license limits rights granted by an
+applicable third-party license.
+
+## 4. Trademarks
+
+"Adverserial AI", "CyberGLM", "CyberKimi", and the associated logos and
+product names are trademarks or trade names of Adverserial AI LLC. This license
+does not grant any right to use them.
+
+## 5. No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY LAW,
+ADVERSERIAL AI LLC SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

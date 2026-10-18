@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import hmac
+import os
 import ipaddress
 import json
 import socket
@@ -406,6 +408,9 @@ class Handler(BaseHTTPRequestHandler):
             size = self._request_size()
             auth = self.headers.get("authorization", "")
             api_key = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else self.headers.get("x-api-key", "").strip()
+            local_token = os.environ.get("ADVERSERIAL_LOCAL_GATEWAY_TOKEN", "")
+            if local_token and hmac.compare_digest(api_key, local_token):
+                api_key = os.environ.get("ADVERSERIAL_UPSTREAM_API_KEY", "")
             payload = json.loads(self._read_body(size))
             if not isinstance(payload, dict):
                 raise ClientRequestError("Request must be a JSON object")

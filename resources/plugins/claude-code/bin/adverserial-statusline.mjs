@@ -40,7 +40,10 @@ if (existsSync(cacheFile)) {
 		const verdict = JSON.parse(readFileSync(cacheFile, 'utf8'));
 		const ageMin = Math.max(0, Math.round((Date.now() - Number(verdict.verifiedAt || 0)) / 60000));
 		const age = ageMin < 1 ? 'just now' : `${ageMin}m ago`;
-		if (verdict.status === 'verified' && ageMin < 60) {
+		const now = Date.now();
+		const expires = Number(verdict.proof?.expiresEpoch) * 1000;
+		const fresh = verdict.trust === 'pinned' && !verdict.proof?.devMode && Number.isFinite(expires) && expires > now && Number.isFinite(verdict.verifiedAt) && verdict.verifiedAt <= now + 5000 && now - verdict.verifiedAt < 300000;
+		if (verdict.status === 'verified' && fresh) {
 			badge = `✓ Adverserial AI attestation verified (${age})`;
 		} else if (verdict.status === 'verified') {
 			badge = `… Adverserial attestation stale (${age})`;

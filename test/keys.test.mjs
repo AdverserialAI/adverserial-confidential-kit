@@ -85,3 +85,17 @@ test('migrates plaintext state to encrypted named profiles and switches the acti
     await rm(home, { recursive: true, force: true });
   }
 });
+test('a denied Keychain read never replaces the key that protects existing profiles',{skip:process.platform!=='darwin'},async()=>{
+ const home=await mkdtemp(join(tmpdir(),'ack-locked-keychain-'));
+ try {
+  const log=join(home,'security-calls');const binary=join(home,'security');
+  await writeFile(binary,'#!/bin/sh\nprintf "%s\\n" "$1" >> "$ACK_SECURITY_CALLS"\nprintf "Keychain access denied\\n" >&2\nexit 36\n',{mode:0o700});
+  const saved={version:2,apiKeyProfiles:{default:{encryptedKey:encrypt('secret-before-denial'),mask:'sec••••••••ial'}},activeKeyProfile:'default',model:'lordx64/cyberglm',endpoint:'https://api.adverserial.ai/v1'};
+  const statePath=join(home,'ack.json');await writeFile(statePath,JSON.stringify(saved));
+  const env={...process.env,ACK_HOME:home,ACK_QUIET:'1',PATH:home,ACK_SECURITY_CALLS:log};delete env.ACK_TEST_STORAGE_KEY;
+  const result=spawnSync(process.execPath,[cli,'keys','list'],{env,encoding:'utf8'});
+  assert.notEqual(result.status,0);assert.match(result.stderr,/existing key was not replaced/);
+  assert.equal((await readFile(log,'utf8')).trim(),'find-generic-password');
+  assert.deepEqual(JSON.parse(await readFile(statePath,'utf8')),saved);
+ } finally {await rm(home,{recursive:true,force:true});}
+});

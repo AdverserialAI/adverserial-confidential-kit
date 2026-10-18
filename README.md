@@ -1,176 +1,274 @@
-# Adverserial Confidential Kit
+<div align="center">
 
-`adverserial-confidential-kit` turns the existing confidential SDK, gateway,
-and harness integrations into one local command-line workflow.
+# ACK · Adverserial Confidential Kit
 
-```sh
-# After the first npm release
-npm install -g adverserial-confidential-kit
+### Your coding agents. One confidential console.
 
-# Or install the current public GitHub source now
-npm install -g github:AdverserialAI/adverserial-confidential-kit
+[![Version](https://img.shields.io/badge/ACK-0.2.1-12b8a6)](package.json)
+[![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
+[![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
+[![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
 
-ack
-```
+[Website](https://adverserial.ai) · [How confidentiality works](https://adverserial.ai/confidential/) · [Verify a runtime](https://verify.adverserial.ai) · [SDK](https://github.com/AdverserialAI/confidential-sdk) · [Security](mailto:security@adverserial.ai)
+
+</div>
+
+ACK prepares and manages the local confidential gateway, stores named API keys
+in an encrypted vault, and connects your preferred coding harness to verified
+Adverserial inference. Run it as a colorful interactive console or use ordinary
+shell commands.
 
 ![ACK Confidential Console](docs/console-home.png)
 
-Running `ack` opens the **Confidential Console**: a full-screen workspace with
-an original Adverserial ASCII mark in color, searchable pickers, encrypted key
-profiles, a session verification badge and a live activity area. Existing
-single-command workflows still work from a normal shell.
+## Install → initialize → code
 
-## The console
-
-- **Command palette:** press `/` or `Ctrl+P`, type to filter, then Enter.
-- **Coding harnesses:** `code` or F2. Arrow keys, a number, or a search choose
-  among Claude Code, Codex, OpenCode, Pi, Oh My Pi, ZCode, DeepSeek Harness,
-  Hermes and Kimi Code. The picker detects which CLIs are actually installed.
-- **Models:** `models` or F3 fetches the published registry. Select a model to
-  activate it and its matching receipt-key policy. The model must have an
-  active policy; a model name alone cannot bypass verification.
-- **Encrypted key vault:** `keys` or F4. Add, replace, activate and delete
-  profiles. Key entry is masked and excluded from command history.
-- **Attestation:** `attestation` or F5 runs a fresh independent check and shows
-  the complete evidence report. The badge starts unverified, expires with the
-  evidence, and rejects unpinned or synthetic evidence as a verified state.
-- **Swarms:** `swarm` opens a task/room menu. Select two or more installed
-  harnesses with Space, press Enter and write a shared task brief. Only the
-  harnesses you explicitly select are launched.
-- **Diagnostics:** `doctor` checks installed harnesses, runtime files, local
-  configuration and receipt-key pins. `status` reads local metadata.
-- **Colors:** `theme` or F6 selects Aurora, Ultraviolet, Ember or Glacier.
-  `motion off` freezes the activity indicator. Preferences persist locally.
-
-`Tab` completes commands. Up/Down browse in-memory command history. Escape goes
-back or cancels input; Page Up/Down scroll the activity area. `Ctrl+L` redraws;
-`exit` returns to the normal terminal. The console handles terminal resizing
-and hands exclusive terminal control to each child harness, then restores
-itself when the harness exits.
-
-The shell adds **no UI dependencies**, performs no network or Keychain calls
-on startup, and repaints only rows that changed. Model discovery and
-verification happen when requested. Console history and verification state
-stay in memory; API-key values never enter the activity log or preferences.
-`NO_COLOR` disables colors, and noninteractive/dumb terminals receive ordinary
-command help instead of a full-screen UI.
+Install the current public GitHub source:
 
 ```sh
-ack                     # Open the console
-ack code                # Open the console directly at the harness picker
-ack code oh-my-pi        # Launch a specific harness directly
-ack harnesses           # See which harnesses are installed
-ack models              # Print published models
-ack model lordx64/cyberglm
-ack status              # Local metadata; no vault unlock
-ack doctor              # Workstation checks
-ack theme ultraviolet   # Persist the console palette
+npm install -g github:AdverserialAI/adverserial-confidential-kit
+ack init
+ack code
 ```
 
-`ack init` asks for an Adverserial API key once, downloads the active public
-policy, pins its receipt keys in `~/.config/adverserial/receipt-keys.json`,
-and prepares a private local confidential runtime in `~/.config/adverserial/venv`.
-Both local config files use mode `0600`; the directory uses mode `0700`.
+Enter your Adverserial API key when prompted. Input is masked. ACK fetches the
+active verification policy, pins its receipt keys and installs an isolated
+Python gateway runtime. Choose an installed harness and start working.
 
-## API-key profiles
+Run `ack` to open the full-screen console. Inside it, use `init`, `code`,
+`models`, `keys`, `attestation` or the searchable command palette.
 
-Keep separate personal, team, or client API keys and switch the active key
-without reconfiguring a harness:
+Once an npm registry release is published, the equivalent install command is
+`npm install -g adverserial-confidential-kit`. The GitHub command above works
+without waiting for that release.
 
-```sh
-ack keys list
-ack keys add personal
-ack keys add acme-security
-ack keys modify acme-security
-ack keys use acme-security
-ack keys delete personal
-```
+### Requirements
 
-Inside the console, `keys` opens a searchable vault with activation, replacement
-and deletion actions. Destructive deletion asks for the profile name; the
-active key cannot be deleted.
-Key input is shown as bullets and profile lists show only a short masked
-fingerprint. On macOS, ACK generates an AES-256-GCM storage key in the macOS
-Keychain and writes only ciphertext, nonce, authentication tag, and a masked
-fingerprint to `~/.config/adverserial/ack.json`. The ACK vault stores no plaintext API-key
-material. Existing ACK state is migrated on its next command.
+- **macOS** for encrypted key storage through Keychain. This release does not
+  implement Linux or Windows credential stores.
+- **Node.js 18+**, npm and **Python 3.10+** on PATH.
+- An Adverserial API key with access to a currently published confidential model.
+- The official CLI for each harness you want to use. ACK detects installed
+  binaries and reports missing ones; it does not install every agent for you.
+- Network access for installation, published policy, independent hardware
+  verification, billing entitlements and confidential inference.
 
-`ack code` handles the confidential runtime end to end: it starts it only for
-the selected harness session, waits for it to become healthy, and stops it when
-the harness exits. It refreshes the private runtime automatically after an
-installed kit update. The runtime verifies fresh attestation and hardware
-evidence, exchanges the API key with billing for a one-use entitlement,
-encrypts requests to the runtime, and requires a signed inference receipt
-before accepting a completed stream. The model endpoint never receives the
-saved API key.
+ACK keeps its own runtime under `~/.config/adverserial/venv`; it does not replace
+your normal Python environment. Existing harness executables are reused. An upstream harness may show its own
+first-run theme or workspace-trust dialog; ACK does not bypass those choices.
+
+## The Confidential Console
+
+| Control | What it does |
+| --- | --- |
+| `/` or Ctrl+P | Search the command palette. |
+| `code` or F2 | Search, number-select or arrow-select an installed coding harness. |
+| `models` or F3 | Browse the public registry and activate a model with its matching active policy. |
+| `keys` or F4 | Add, replace, activate and delete encrypted named API-key profiles. |
+| `attestation` or F5 | Run a fresh independent hardware and pinned-receipt check. |
+| `theme` or F6 | Choose Aurora, Ultraviolet, Ember or Glacier. |
+| `swarm` | Select harness workers or manage a local collaboration room. |
+| `doctor` / `status` | Inspect installed tools, runtime files, key pins and local configuration. |
+| `motion off` / `motion on` | Disable or enable the activity animation. |
+
+The original Adverserial ASCII logo appears in color beside the wordmark.
+Preferences persist locally. Tab completes commands, Up/Down browse in-memory
+history, Escape returns or cancels, Page Up/Down scroll, and Ctrl+L redraws.
+The console handles terminal resizing and restores itself after a harness exits.
+
+Startup is local: no Keychain unlock or network fetch is required to draw the
+first frame. The renderer has no additional UI dependencies and updates changed
+rows. `NO_COLOR` disables colors; noninteractive terminals receive command help.
+
+## Coding harnesses
 
 ```sh
 ack code claude
 ack code codex
 ack code opencode
 ack code pi
+ack code oh-my-pi
+ack code zcode
+ack code deepseek-harness
 ack code hermes
 ack code kimi
-ack models
+ack harnesses
+```
+
+| Harness | Binary | ACK integration |
+| --- | --- | --- |
+| Claude Code | `claude` | Bundled verification plugin, native attestation command and attestation status line. |
+| Codex | `codex` | Confidential provider profile, published verification plugin, local skill and custom-prompt fallback. |
+| OpenCode | `opencode` | Isolated provider configuration, local verifier plugin and attestation slash command. |
+| Pi | `pi` | Verified provider extension, verification tool/command, footer and collaboration tools. |
+| Oh My Pi | `omp` | Verified provider extension, verification tool/command, footer and collaboration tools. |
+| ZCode | `zcode` | Versioned provider configuration and process-scoped gateway credential; billing key stays out of the provider file. |
+| DeepSeek Harness | `dsh` | Confidential provider and default model; interactive Web profile and headless worker profile. |
+| Hermes | `hermes` | ACK-owned provider configuration, environment credential reference and verification skill. |
+| Kimi Code | `kimi` | Managed model alias, environment credential reference and verification skill. |
+
+ACK configures each selected harness rather than changing the executable itself.
+OpenCode and Hermes use ACK-owned configuration directories. Codex receives a
+separate confidential profile and verification integrations in its selected
+`CODEX_HOME`. Kimi's managed block preserves unrelated existing TOML settings.
+
+For binaries outside PATH, set an absolute executable override, for example:
+
+```sh
+export ACK_CODEX_BIN=/absolute/path/to/codex
+export ACK_OMP_BIN=/absolute/path/to/omp
+export ACK_DSH_BIN=/absolute/path/to/dsh
+ack code codex
+```
+
+Other overrides are `ACK_CLAUDE_BIN`, `ACK_OPENCODE_BIN`, `ACK_PI_BIN`,
+`ACK_ZCODE_BIN`, `ACK_HERMES_BIN` and `ACK_KIMI_BIN`.
+
+## Attestation and verification
+
+```sh
 ack attestation
+ack attestation --json
+```
+
+The verifier checks pinned receipt keys, fresh endpoint evidence, the expected
+model and policy, independent hardware evidence, and the quote-bound transport
+identity. The gateway verifies the confidential request path and signed final
+inference receipt separately. Failed, stale, unpinned or synthetic evidence is
+not a verified confidential runtime.
+
+The console badge starts unchecked and expires with the evidence. Supported
+harness interfaces expose verification as follows:
+
+- **Claude:** `/adverserial-verify-claude:attestation`; the bottom status line
+  displays the cached verdict and refuses expired or unpinned evidence.
+- **Codex:** select the installed `adverserial-verify` plugin skill with
+  `$adverserial-verify` or `/skills`. ACK also installs `$adverserial-attestation`
+  and `/prompts:adverserial-attestation` for CLI versions supporting custom
+  prompts. Restart Codex after installation. A Claude-style custom attestation
+  status line is not provided by this integration.
+- **OpenCode:** `/adverserial-attestation`, plus the `adverserial_verify` and
+  `adverserial_status` tools.
+- **Pi / Oh My Pi:** `/adverserial-verify`, the `adverserial_verify` tool and
+  an attestation footer.
+- **Hermes / Kimi:** the supplied `adverserial-verify` skill invokes ACK's
+  installed verifier through the harness shell tool.
+- **Every harness:** `ack attestation` remains available from a normal terminal.
+  ZCode and DeepSeek Harness do not currently install native attestation slash
+  commands or custom attestation footers.
+
+Commands, skills and footer capabilities vary by upstream CLI version; the
+presence of a command is not evidence that verification succeeded.
+
+## Encrypted API-key profiles
+
+```sh
+ack keys list
+ack keys add personal
+ack keys add security-team
+ack keys modify security-team
+ack keys use security-team
+ack keys delete personal
+```
+
+Keys are encrypted with AES-256-GCM in `~/.config/adverserial/ack.json` using a
+random storage key held in macOS Keychain. Key entry is masked; listings show
+only a short masked identifier. Secret values are excluded from console history,
+preferences and activity logs. ACK refuses to delete the active profile: select
+another one first. Existing plaintext ACK state is migrated into encrypted
+profiles when read.
+
+Configuration files use mode `0600` and private directories use `0700`.
+Credentials are decrypted into memory and passed to the selected local harness
+and gateway for the session. ZCode's provider file contains only a random local
+session token, not the billing key. Selected harnesses can access their own
+process environment, so use trusted upstream CLIs and workspace tools.
+
+## Models and runtime lifecycle
+
+```sh
+ack models
+ack model lordx64/cyberglm
+ack upgrade
+ack doctor
+ack status
+```
+
+Model discovery uses the public registry. Activation requires the matching active
+policy and pinned receipt keys. For the production model, ACK uses the current
+production policy even if a registry entry still points to an older template.
+An unknown model or inactive policy cannot bypass verification.
+
+ACK starts the loopback gateway for a coding session or swarm, waits for readiness
+and stops its owned gateway when the session finishes. It refreshes the private
+runtime after an ACK version change. An unrelated listener on the requested port
+is not trusted or stopped automatically. The default port is `8787`; select a
+free port with `ADVERSERIAL_GATEWAY_PORT` when running separate sessions.
+
+The gateway exchanges the API key with billing for a scoped entitlement and
+sends encrypted requests to the attested runtime. The model endpoint receives
+the entitlement instead of the billing key. Completed streams require a signed
+inference receipt.
+
+To update ACK itself, reinstall the GitHub package, then refresh its runtime:
+
+```sh
+npm install -g github:AdverserialAI/adverserial-confidential-kit
 ack upgrade
 ```
 
+`ack upgrade` refreshes runtime files and policy; it does not replace the globally
+installed npm package.
+
 ## Confidential swarms
 
-Use `ack swarm` when a task benefits from independent coding-agent views. It starts one verified gateway for the whole job, limits workers to two by default, gives each worker a shared local brief, and asks a lead harness to reconcile their reports. Prompts and reports remain in the local swarm directory under `~/.config/adverserial/swarms/`.
+Choose workers in the console or run:
 
 ```sh
-ack swarm --agents claude,codex --workers 2 --lead claude \
-  "audit this repository and propose a minimal fix"
+ack swarm --agents claude,pi --workers 2 --lead claude \
+  "review this repository and propose a minimal fix"
 ```
 
-The default selects every supported harness. Use `--agents` to choose a smaller group when you want to control usage or focus the review.
+ACK shares a local brief, collects worker reports, and asks the lead to reconcile
+the results. One verified gateway serves the job. Worker concurrency is bounded
+from one to four; two is the default. All selected harnesses must be installed.
+Use an explicit agent list to control usage. Reports remain under
+`~/.config/adverserial/swarms/`.
 
-### Connecting already-open sessions
-
-Harnesses do not expose a safe API for another process to inject text into an existing private conversation. Instead, `ack` provides a local file-backed room that active agents can explicitly join on their next turn:
+Already-open agents can cooperate through a local room:
 
 ```sh
 ack swarm create incident-review
-ack swarm invite --to pi "Review the streaming adapter and post the failure mode."
+ack swarm invite --to pi "Review cancellation and post your findings."
 ack swarm inbox --agent pi
-ack swarm post --from pi --to claude "Found the issue and saved a patch at …"
+ack swarm post --from pi --to claude "Findings saved in the shared workspace."
 ```
 
-This lets a Claude session delegate work to an already-open Pi session, and lets Pi report back, without copying either session’s hidden conversation, credentials, or prompt history. The Claude integration recognizes explicit swarm requests, and the Pi integration exposes `adverserial_swarm_inbox` and `adverserial_swarm_post` tools when launched through `ack code pi`. An already-open Pi session receives the task on its next turn when it reads its inbox; the kit never injects text into a terminal in the background. All room artifacts are private local files under `~/.config/adverserial/swarm-rooms/`.
+An agent reads pending tasks on its next turn; ACK does not inject text into an
+existing terminal or copy hidden conversation history. Claude, Pi and Oh My Pi
+have collaboration integrations. Room artifacts live in
+`~/.config/adverserial/swarm-rooms/`.
 
-The target harness must already be installed. The kit creates an isolated
-Codex profile and ephemeral OpenCode/Hermes config snippets; it does not
-overwrite the user’s normal provider configuration. This repository is the source of the public `adverserial-confidential-kit` package. Before the first npm release, configure npm trusted publishing for this GitHub repository; the included release workflow then publishes the tagged package with provenance.
-
-### Harness selection
-
-Run `ack`, then `code`, to choose a searchable keyboard-driven launcher menu. ACK configures the
-local receipt-verifying gateway and starts the selected installed harness.
-
-Supported launchers are Claude Code, Codex, OpenCode, Pi, Oh My Pi (`omp`),
-ZCode, DeepSeek Harness (`dsh`), Hermes, and Kimi Code. `ack code codex`
-also installs the published `adverserial-verify` Codex plugin; invoke it in
-Codex as `$adverserial-verify` or choose it from `/skills`. It also adds
-the slash-prompt fallback `/prompts:adverserial-attestation` for Codex builds
-that show custom prompts in their slash menu. Start a new Codex session after
-installation so it loads either entry. Pi and Oh My Pi expose
-`/adverserial-verify` and show the current attestation verdict in their footer.
-
-## Development
+## Development and test coverage
 
 ```sh
 npm ci
 npm test
-npm run test:terminal  # macOS/Linux PTY integration checks
+npm run test:terminal
 npm run smoke
-node bin/ack.mjs
 ```
 
-The terminal renderer lives in `lib/console.mjs`, logo artwork in `lib/art.mjs`,
-and confidential runtime/key/harness operations in `lib/ack.mjs`. Tests cover
-terminal handoff and restoration, encrypted-profile operations, secret masking,
-policy references, evidence expiry and existing harness configuration.
-Encrypted key storage currently requires the macOS Keychain; other operating
-systems need a credential-store implementation before `init` can save keys.
+The terminal renderer is in `lib/console.mjs`, artwork in `lib/art.mjs`, and
+vault, policy, runtime and harness operations in `lib/ack.mjs`. Regression tests
+cover encrypted profile changes, masked input, cancellation, terminal handoff,
+model policy activation, provider configuration, and attestation badge expiry.
+Live harness verification is version-specific; see [the test report](docs/TESTING.md).
+
+## Licensing
+
+**Source-available proprietary software — not an open-source license.**
+
+The [Adverserial Proprietary License](LICENSE) governs ACK's Adverserial-authored
+material. A separate written agreement is required as described there. See
+[LICENSING.md](LICENSING.md) for scope and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for retained dependency terms.
+Upstream coding harnesses remain separate products under their own terms.
