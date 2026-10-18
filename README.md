@@ -68,3 +68,14 @@ This lets a Claude session delegate work to an already-open Pi session, and lets
 The target harness must already be installed. The kit creates an isolated
 Codex profile and ephemeral OpenCode/Hermes config snippets; it does not
 overwrite the user’s normal provider configuration. This repository is the source of the public `adverserial-confidential-kit` package. Before the first npm release, configure npm trusted publishing for this GitHub repository; the included release workflow then publishes the tagged package with provenance.
+
+### Harness selection
+
+Run `ack`, then `code`, to choose a colored launcher menu. ACK configures the
+local receipt-verifying gateway and starts the selected installed harness.
+
+Supported launchers are Claude Code, Codex, OpenCode, Pi, Oh My Pi (`omp`),
+ZCode, DeepSeek Harness (`dsh`), Hermes, and Kimi Code. `ack code codex`
+also installs the local `adverserial-attestation` Codex skill; invoke it in
+Codex as `$adverserial-attestation`. Pi and Oh My Pi expose
+`/adverserial-verify` and show the current attestation verdict in their footer.

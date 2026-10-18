@@ -101,6 +101,7 @@ export default async function (pi: ExtensionAPI) {
 			handler: async (_args, ctx) => ctx.ui.notify((await runVerifier()).output, 'warning')
 		});
 		pi.on('session_start', async (_event, ctx) => {
+			ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg('error', '✕ Adverserial attestation needs attention'));
 			ctx.ui.notify('Adverserial confidential provider is unavailable: attestation did not verify. Run /adverserial-verify for details.', 'error');
 		});
 		return;
@@ -169,10 +170,15 @@ export default async function (pi: ExtensionAPI) {
 
 	pi.registerCommand('adverserial-verify', {
 		description: 'Run a fresh Adverserial confidential-runtime attestation check',
-		handler: async (_args, ctx) => ctx.ui.notify((await runVerifier()).output, 'info')
+			handler: async (_args, ctx) => {
+			const result = await runVerifier();
+			ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg(result.ok ? 'success' : 'error', result.ok ? '✓ Adverserial attestation verified' : '✕ Adverserial attestation failed'));
+			ctx.ui.notify(result.output, result.ok ? 'info' : 'error');
+		}
 	});
 
 	pi.on('session_start', async (_event, ctx) => {
+		ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg('success', '✓ Adverserial attestation verified'));
 		ctx.ui.notify('Adverserial confidential runtime verified. Requests use the local receipt-verifying gateway.', 'info');
 	});
 }
