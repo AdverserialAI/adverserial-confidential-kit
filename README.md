@@ -10,9 +10,10 @@ npm install -g adverserial-confidential-kit
 # Or install the current public GitHub source now
 npm install -g github:AdverserialAI/adverserial-confidential-kit
 
-ack init
-ack code claude
+ack
 ```
+
+Running bare `ack` opens the Confidential Shell: a persistent local session with the Adverserial mark, an `ack ›` prompt, and commands for `init`, `upgrade`, `code`, `models`, `attestation`, and `swarm`. Setup phases use one animated status line that clears before returning to the shell or launching a harness.
 
 `ack init` asks for an Adverserial API key once, downloads the active public
 policy, pins its receipt keys in `~/.config/adverserial/receipt-keys.json`,
