@@ -27,7 +27,10 @@ disposable. API keys were not included in prompts or the public report.
 Interactive launch checks used real pseudo-terminals and normal upstream
 onboarding/trust dialogs. DeepSeek Harness launches its Web profile, not a
 terminal UI. Pi and Oh My Pi exposed their verification footer and native
-verification command. Native command/skill availability differs by harness;
+verification command. Claude's native `/adverserial-verify-claude:attestation`
+command completed in its TUI and changed the footer to a verified verdict.
+The installed npm archive also passed a fresh init/upgrade/key-management run.
+Native command/skill availability differs by harness;
 see the README rather than assuming every agent supports the same slash command.
 
 ## Workflow and regression coverage
