@@ -77,5 +77,8 @@ local receipt-verifying gateway and starts the selected installed harness.
 Supported launchers are Claude Code, Codex, OpenCode, Pi, Oh My Pi (`omp`),
 ZCode, DeepSeek Harness (`dsh`), Hermes, and Kimi Code. `ack code codex`
 also installs the local `adverserial-attestation` Codex skill; invoke it in
-Codex as `$adverserial-attestation`. Pi and Oh My Pi expose
+Codex as `$adverserial-attestation` or choose it from `/skills`. It also adds
+the slash-prompt fallback `/prompts:adversarial-attestation` for Codex builds
+that show custom prompts in their slash menu. Start a new Codex session after
+installation so it loads either entry. Pi and Oh My Pi expose
 `/adverserial-verify` and show the current attestation verdict in their footer.
