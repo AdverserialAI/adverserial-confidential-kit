@@ -27,12 +27,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AdverserialAI/confidential-sdk.git",
-    "directory": "kit"
+    "url": "git+https://github.com/AdverserialAI/adverserial-confidential-kit.git"
   },
-  "homepage": "https://github.com/AdverserialAI/confidential-sdk/tree/main/kit",
+  "homepage": "https://github.com/AdverserialAI/adverserial-confidential-kit#readme",
   "bugs": {
-    "url": "https://github.com/AdverserialAI/confidential-sdk/issues"
+    "url": "https://github.com/AdverserialAI/adverserial-confidential-kit/issues"
   },
   "publishConfig": {
     "access": "public"
