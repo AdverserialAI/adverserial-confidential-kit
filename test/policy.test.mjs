@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { configureKimi, configureOpenCode, resolveHarnessBinary } from '../lib/ack.mjs';
+import { configureKimi, configureOpenCode, harnessCommand, resolveHarnessBinary } from '../lib/ack.mjs';
 import { fetchProductionPolicy } from '../lib/ack.mjs';
 
 test('rejects a policy without pinned receipt keys', async () => {
@@ -25,6 +25,15 @@ test('the packaged hardware verifier resolves its bundled runtime', async () => 
 
 test('finds an explicitly configured harness binary without relying on PATH', () => {
   assert.equal(resolveHarnessBinary('codex', { PATH: '', ACK_CODEX_BIN: '/bin/sh' }), '/bin/sh');
+});
+
+test('launches Oh My Pi with the Node-backed bundled verifier', async () => {
+  const selected = await harnessCommand('oh-my-pi', { apiKey: 'test-key', model: 'lordx64/cyberglm' }, {
+    HOME: tmpdir(), PATH: '', ACK_OMP_BIN: '/bin/echo'
+  });
+  assert.equal(selected.command, '/bin/echo');
+  assert.match(selected.env.ADVERSERIAL_VERIFY_COMMAND, /plugins\/adverserial-verify\/bin\/adverserial-verify$/);
+  assert.match(selected.args.join(' '), /adverserial-confidential\/lordx64\/cyberglm/);
 });
 
 test('creates and refreshes an isolated managed Kimi model alias', async () => {
