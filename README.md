@@ -13,12 +13,33 @@ npm install -g github:AdverserialAI/adverserial-confidential-kit
 ack
 ```
 
-Running bare `ack` opens the Confidential Shell: a persistent local session with the Adverserial mark, an `ack ›` prompt, and commands for `init`, `upgrade`, `code`, `models`, `attestation`, and `swarm`. Setup phases use one animated status line that clears before returning to the shell or launching a harness.
+Running bare `ack` opens the Confidential Shell: a persistent local session with the Adverserial mark, an `ack ›` prompt, and commands for `init`, `keys`, `upgrade`, `code`, `models`, `attestation`, and `swarm`. Setup phases use one animated status line that clears before returning to the shell or launching a harness.
 
 `ack init` asks for an Adverserial API key once, downloads the active public
 policy, pins its receipt keys in `~/.config/adverserial/receipt-keys.json`,
 and prepares a private local confidential runtime in `~/.config/adverserial/venv`.
 Both local config files use mode `0600`; the directory uses mode `0700`.
+
+## API-key profiles
+
+Keep separate personal, team, or client API keys and switch the active key
+without reconfiguring a harness:
+
+```sh
+ack keys list
+ack keys add personal
+ack keys add acme-security
+ack keys modify acme-security
+ack keys use acme-security
+ack keys delete personal
+```
+
+Inside the ACK shell, `keys use` opens the same colored numbered selector.
+Key input is shown as bullets and profile lists show only a short masked
+fingerprint. On macOS, ACK generates an AES-256-GCM storage key in the macOS
+Keychain and writes only ciphertext, nonce, authentication tag, and a masked
+fingerprint to `~/.config/adverserial/ack.json`. It never writes API-key
+material in clear text. Existing ACK state is migrated on its next command.
 
 `ack code` handles the confidential runtime end to end: it starts it only for
 the selected harness session, waits for it to become healthy, and stops it when
