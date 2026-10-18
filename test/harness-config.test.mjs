@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import {runInNewContext} from 'node:vm';
-import { harnessCommand, headlessCommand, configureKimi } from '../lib/ack.mjs';
+import { harnessCommand, headlessCommand, configureKimi, upsertDotenv } from '../lib/ack.mjs';
 
 const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'lordx64/cyberglm', endpoint:'https://api.adverserial.ai/v1'});
 async function fixture(t) {
@@ -96,4 +96,32 @@ test('Oh My Pi does not reuse a Pi agent-directory override from another harness
  const {home,env}=await fixture(t);env.ACK_OMP_BIN='/bin/echo';env.PI_CODING_AGENT_DIR=join(home,'pi');env.OMP_CODING_AGENT_DIR=join(home,'omp');
  const omp=await harnessCommand('oh-my-pi',state(),env);
  assert.equal(omp.env.PI_CODING_AGENT_DIR,env.OMP_CODING_AGENT_DIR);assert.notEqual(omp.env.PI_CODING_AGENT_DIR,env.PI_CODING_AGENT_DIR);
+});
+test('Hermes exports ADVERSERIAL_ACK_CLI into the home env for user-run gateways',async t=>{
+ const {home,env}=await fixture(t);const first=await harnessCommand('hermes',state(),env);
+ const escape=(value)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const envFile=join(home,'hermes','.env');let text=await readFile(envFile,'utf8');
+ assert.match(text,new RegExp(`^ADVERSERIAL_ACK_CLI=${escape(first.env.ADVERSERIAL_ACK_CLI)}$`,'m'));
+ assert.ok(!text.includes(state().apiKey));
+ await writeFile(envFile,`KEEP_ME=yes\nADVERSERIAL_ACK_CLI=/stale/ack.mjs\n`);
+ const second=await harnessCommand('hermes',state(),env);text=await readFile(envFile,'utf8');
+ assert.match(text,new RegExp(`^ADVERSERIAL_ACK_CLI=${escape(second.env.ADVERSERIAL_ACK_CLI)}$`,'m'));
+ assert.match(text,/^KEEP_ME=yes$/m);
+ assert.equal(first.env.ADVERSERIAL_ACK_CLI,second.env.ADVERSERIAL_ACK_CLI);
+ if(process.platform!=='win32')assert.equal((await stat(envFile)).mode&0o777,0o600);
+});
+test('Hermes writes the env into both the scoped session home and the original home',async t=>{
+ const {home,env}=await fixture(t);env.ACK_SESSION_HOME=join(home,'session');
+ await harnessCommand('hermes',state(),env);
+ for(const file of [join(home,'session','hermes','.env'),join(home,'hermes','.env')]) {
+  assert.match(await readFile(file,'utf8'),/^ADVERSERIAL_ACK_CLI=.*ack\.mjs$/m, file);
+ }
+});
+test('upsertDotenv creates, refreshes stale values, and leaves unrelated lines alone',async t=>{
+ const {home}=await fixture(t);const file=join(home,'nested','.env');
+ assert.equal(await upsertDotenv(file,{ADVERSERIAL_ACK_CLI:'/opt/ack/bin/ack.mjs'}),true);
+ assert.equal(await upsertDotenv(file,{ADVERSERIAL_ACK_CLI:'/opt/ack/bin/ack.mjs'}),false);
+ await writeFile(file,'PREVIOUS=1\nexport ADVERSERIAL_ACK_CLI=/old\n# note\n');
+ assert.equal(await upsertDotenv(file,{ADVERSERIAL_ACK_CLI:'/new/ack.mjs',ADDED_LATER:'x'}),true);
+ assert.equal(await readFile(file,'utf8'),'PREVIOUS=1\nADVERSERIAL_ACK_CLI=/new/ack.mjs\n# note\n\nADDED_LATER=x\n');
 });
