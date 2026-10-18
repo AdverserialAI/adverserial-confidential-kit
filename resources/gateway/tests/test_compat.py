@@ -33,6 +33,21 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(chat["messages"][1], {"role": "system", "content": "policy"})
         self.assertEqual(chat["max_tokens"], 9)
 
+    def test_responses_discards_hosted_codex_tools_but_preserves_local_functions(self):
+        chat = responses_to_chat({
+            "input": "hello",
+            "tools": [
+                {"type": "function", "name": "exec_command", "description": "local shell", "parameters": {"type": "object"}, "strict": True},
+                {"type": "namespace", "name": "multi_agent_v1", "tools": [{"type": "function", "name": "spawn_agent", "parameters": {"type": "object"}}]},
+                {"type": "web_search", "external_web_access": True},
+            ],
+        })
+        self.assertEqual([tool["function"]["name"] for tool in chat["tools"]], ["exec_command"])
+
+    def test_responses_rejects_an_unknown_hosted_tool_class(self):
+        with self.assertRaisesRegex(ClientRequestError, "unavailable"):
+            responses_to_chat({"input": "hello", "tools": [{"type": "computer"}]})
+
     def test_responses_preserves_function_call_result_and_tool_definition(self):
         chat = responses_to_chat({
             "input": [

@@ -1,6 +1,6 @@
 {
   "name": "adverserial-confidential-kit",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "One-command setup for Adverserial confidential coding harnesses",
   "license": "LicenseRef-Adverserial-Commercial",
   "type": "module",

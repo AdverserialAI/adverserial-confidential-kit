@@ -205,14 +205,29 @@ def _responses_message(item: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _responses_tools(value: Any) -> list[dict[str, Any]]:
+    """Translate only tools executable by the local coding client.
+
+    Codex includes two provider-hosted tool classes in every Responses request:
+    ``web_search`` and a ``namespace`` for its hosted multi-agent runtime.
+    They cannot be carried to the confidential OpenAI-compatible runtime: they
+    would either require a provider-side service or advertise calls the local
+    client cannot execute after conversion. Ignore those optional tools so
+    standard local function tools (shell, editor, image viewer, and prompts)
+    remain available. Unknown tool classes still fail closed.
+    """
     if value is None:
         return []
     if not isinstance(value, list):
         raise ClientRequestError("Responses tools must be an array")
     converted: list[dict[str, Any]] = []
     for tool in value:
-        if not isinstance(tool, Mapping) or tool.get("type") != "function" or not isinstance(tool.get("name"), str) or not tool["name"]:
-            raise ClientRequestError("only Responses function tools are available through the confidential gateway")
+        if not isinstance(tool, Mapping):
+            raise ClientRequestError("Responses tools must contain objects")
+        kind = tool.get("type")
+        if kind in {"web_search", "namespace"}:
+            continue
+        if kind != "function" or not isinstance(tool.get("name"), str) or not tool["name"]:
+            raise ClientRequestError(f"Responses tool type {kind!r} is unavailable through the confidential gateway")
         params = tool.get("parameters", {"type": "object"})
         if not isinstance(params, Mapping):
             raise ClientRequestError("Responses function parameters must be an object")
