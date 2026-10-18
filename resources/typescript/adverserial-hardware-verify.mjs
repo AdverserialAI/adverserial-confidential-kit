@@ -11,7 +11,7 @@
  * collateral) and the NVIDIA NRAS detached-EAT bundle verifier (NVIDIA's
  * public JWKS). ADVERSERIAL_MIN_GPU_COUNT overrides the default minimum of 8.
  */
-import { createPhalaNVIDIAVerifier } from '../dist/phala.js';
+import { createPhalaNVIDIAVerifier } from './dist/phala.js';
 
 const readStdin = async () => {
 	const chunks = [];
