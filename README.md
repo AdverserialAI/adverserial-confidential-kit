@@ -4,7 +4,12 @@
 and harness integrations into one local command-line workflow.
 
 ```sh
+# After the first npm release
 npm install -g adverserial-confidential-kit
+
+# Or install the current public GitHub source now
+npm install -g github:AdverserialAI/adverserial-confidential-kit
+
 ack init
 ack code claude
 ```
