@@ -1,0 +1,13 @@
+# Use with: codex --profile confidential
+model = "lordx64/cyberglm"
+model_provider = "adverserial_confidential"
+
+[model_providers.adverserial_confidential]
+name = "Adverserial Confidential"
+base_url = "http://127.0.0.1:8787/v1"
+env_key = "ADVERSERIAL_API_KEY"
+wire_api = "responses"
+# The billing key is the sole credential used by this provider. Do not make
+# Codex fall back to a ChatGPT/OpenAI account for this model.
+requires_openai_auth = false
+supports_websockets = false

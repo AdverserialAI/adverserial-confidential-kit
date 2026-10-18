@@ -1,0 +1,16 @@
+{
+  "name": "adverserial-verify",
+  "version": "0.2.0",
+  "description": "Verify Adverserial confidential-inference evidence before a coding client sends prompts.",
+  "author": {"name": "Adverserial AI"},
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Adverserial Verify",
+    "shortDescription": "Verify confidential inference evidence.",
+    "longDescription": "Guides Codex through independent attestation verification before use of a confidential Adverserial endpoint.",
+    "developerName": "Adverserial AI",
+    "category": "Developer tools",
+    "capabilities": ["attestation verification"],
+    "defaultPrompt": "Verify the Adverserial confidential endpoint before using it."
+  }
+}

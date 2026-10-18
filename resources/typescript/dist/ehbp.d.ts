@@ -1,0 +1,23 @@
+export declare const EHBP_VERSION = "adverserial-ehbp-v1";
+export declare const EHBP_CONTENT_TYPE = "application/adverserial-ehbp+json";
+export declare const EHBP_KEM = "DHKEM(X25519,HKDF-SHA256)";
+export declare const EHBP_KDF = "HKDF-SHA256";
+export declare const EHBP_AEAD = "AES-256-GCM";
+export type EHBPEnvelope = {
+    version: typeof EHBP_VERSION;
+    kem: typeof EHBP_KEM;
+    kdf: typeof EHBP_KDF;
+    aead: typeof EHBP_AEAD;
+    enc: string;
+    ciphertext: string;
+};
+export declare const requestInfo: () => Uint8Array;
+export declare const responseInfo: () => Uint8Array;
+export declare const ehbpAAD: (method: string, path: string, nonce: string) => Uint8Array;
+export declare const sealEHBP: (recipientRaw: Uint8Array, plaintext: Uint8Array, info: Uint8Array, aad: Uint8Array) => Promise<EHBPEnvelope>;
+export declare const openEHBPWithKeyPair: (receiver: CryptoKeyPair, envelope: EHBPEnvelope, info: Uint8Array, aad: Uint8Array) => Promise<Uint8Array>;
+export declare const openEHBP: (receiver: CryptoKeyPair, envelope: EHBPEnvelope, info: Uint8Array, aad: Uint8Array) => Promise<Uint8Array>;
+export declare const generateEHBPReceiver: () => Promise<CryptoKeyPair>;
+export declare const exportEHBPReceiverPublic: (key: CryptoKey) => Promise<Uint8Array>;
+export declare const parseEHBPEnvelope: (value: unknown) => EHBPEnvelope;
+export declare const attestedEHBPReceiver: (value: unknown) => Promise<Uint8Array>;

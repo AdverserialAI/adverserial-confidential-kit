@@ -1,0 +1,25 @@
+{
+  "name": "@adverserial/kimi-code-plugin",
+  "version": "0.1.0",
+  "description": "Kimi Code CLI plugin: verify the attestation of the Adverserial confidential inference endpoint (CLI + skill + session hook)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/adverserial-verify.bundle.mjs",
+  "bin": {
+    "adverserial-verify": "./bin/adverserial-verify"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skills",
+    "commands",
+    "kimi.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build-cli-bundle.mjs && cp dist/adverserial-verify.bundle.mjs ../claude-code/bin/adverserial-verify-cli.mjs && cp dist/adverserial-verify.bundle.mjs ../adverserial-verify/bin/adverserial-verify.mjs",
+    "prebuild": "npm --prefix ../../typescript install --no-audit --no-fund"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "adverserial-verify",
+  "version": "0.1.0",
+  "description": "Verify the attestation of the Adverserial confidential inference endpoint (TDX evidence + ES256 receipt) before trusting it with sensitive prompts.",
+  "skills": "./skills/",
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "command": "node ./bin/adverserial-verify",
+      "timeout": 30
+    }
+  ],
+  "interface": {
+    "displayName": "Adverserial Verify",
+    "shortDescription": "Attestation verification for the Adverserial confidential inference endpoint"
+  },
+  "commands": "./commands/"
+}

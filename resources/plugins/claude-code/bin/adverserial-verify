@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+/**
+ * adverserial-verify — Claude Code plugin entry point.
+ *
+ * Runs the self-contained CLI bundle shipped next to this shim
+ * (bin/adverserial-verify-cli.mjs). The bundle inlines every dependency, so
+ * the plugin works from any install location — including Claude Code's
+ * versioned plugin cache, which copies only this directory.
+ */
+import { fileURLToPath } from 'node:url';
+
+await import(new URL('./adverserial-verify-cli.mjs', import.meta.url));

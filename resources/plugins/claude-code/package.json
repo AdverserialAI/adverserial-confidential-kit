@@ -1,0 +1,13 @@
+{
+	"name": "@adverserial/claude-code-plugin",
+	"version": "0.1.0",
+	"description": "Claude Code plugin: verify the attestation of the Adverserial confidential inference endpoint (CLI + skill + slash command + session hook)",
+	"license": "UNLICENSED",
+	"type": "module",
+	"bin": {
+		"adverserial-verify": "./bin/adverserial-verify"
+	},
+	"engines": {
+		"node": ">=18"
+	}
+}

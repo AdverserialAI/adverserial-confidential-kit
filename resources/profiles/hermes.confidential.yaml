@@ -1,0 +1,8 @@
+# Merge this alias into ~/.hermes/config.yaml, then select it with
+# `/model cyberglm` in Hermes.
+model_aliases:
+  cyberglm:
+    model: lordx64/cyberglm
+    provider: custom
+    base_url: "http://127.0.0.1:8787/v1"
+    key_env: ADVERSERIAL_API_KEY

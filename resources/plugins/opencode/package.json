@@ -1,0 +1,25 @@
+{
+  "name": "@adverserial/opencode-plugin",
+  "version": "0.1.0",
+  "description": "opencode plugin: verify the attestation of the Adverserial confidential inference endpoint from inside the coding session",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/plugins/opencode/src/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node test/smoke.mjs",
+    "prebuild": "npm --prefix ../../typescript install --no-audit --no-fund"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.34"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

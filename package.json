@@ -1,0 +1,40 @@
+{
+  "name": "adverserial-confidential-kit",
+  "version": "0.1.0",
+  "description": "One-command setup for Adverserial confidential coding harnesses",
+  "license": "LicenseRef-Adverserial-Commercial",
+  "type": "module",
+  "bin": {
+    "ack": "./bin/ack.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "resources",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@phala/dcap-qvl": "0.6.5",
+    "ehbp": "0.3.3"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "smoke": "node bin/ack.mjs --help"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AdverserialAI/confidential-sdk.git",
+    "directory": "kit"
+  },
+  "homepage": "https://github.com/AdverserialAI/confidential-sdk/tree/main/kit",
+  "bugs": {
+    "url": "https://github.com/AdverserialAI/confidential-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "adverserial-verify",
+  "version": "0.2.0",
+  "description": "Verify Adverserial confidential-inference attestation before a Codex session uses the endpoint.",
+  "author": {
+    "name": "Adverserial AI",
+    "url": "https://adverserial.ai"
+  },
+  "homepage": "https://adverserial.ai/confidential/",
+  "repository": "https://github.com/AdverserialAI/confidential-sdk",
+  "license": "Apache-2.0",
+  "keywords": ["attestation", "confidential-computing", "tdx", "inference", "security"]
+}

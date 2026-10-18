@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "adverserial": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Adverserial Confidential",
+      "options": {
+        "baseURL": "http://127.0.0.1:8787/v1",
+        "apiKey": "{env:ADVERSERIAL_API_KEY}"
+      },
+      "models": {
+        "lordx64/cyberglm": {
+          "name": "CyberGLM — verified confidential runtime"
+        }
+      }
+    }
+  },
+  "model": "adverserial/lordx64/cyberglm"
+}

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adverserial"
+version = "0.1.0"
+description = "Client-side verification SDK for Adversarial AI confidential-inference endpoints: attestation verification + TLS SPKI pinning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = ["cryptography>=41", "tinfoil-ehbp==0.3.2"]
+
+[project.scripts]
+adverserial-verify = "adverserial.__main__:main"
+adverserial-hardware-verify = "adverserial.hardware_verifier:main"
+
+[tool.setuptools.packages.find]
+include = ["adverserial*"]
