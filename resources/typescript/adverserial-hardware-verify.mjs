@@ -11,7 +11,17 @@
  * collateral) and the NVIDIA NRAS detached-EAT bundle verifier (NVIDIA's
  * public JWKS). ADVERSERIAL_MIN_GPU_COUNT overrides the default minimum of 8.
  */
-import { createPhalaNVIDIAVerifier } from './dist/phala.js';
+let createPhalaNVIDIAVerifier;
+try {
+  ({ createPhalaNVIDIAVerifier } = await import('./dist/phala.js'));
+} catch {
+  process.stderr.write('ACK hardware-verifier runtime is incomplete. Reinstall ACK with npm install -g github:AdverserialAI/adverserial-confidential-kit. For a linked source checkout, run npm ci in that checkout.\n');
+  process.exit(1);
+}
+if (process.argv.includes('--check-runtime')) {
+  process.stdout.write('ACK hardware-verifier runtime ready\n');
+  process.exit(0);
+}
 
 const readStdin = async () => {
 	const chunks = [];

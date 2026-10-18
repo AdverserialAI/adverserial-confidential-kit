@@ -8,6 +8,24 @@ The 0.2.2 visual update replaces the large logo with a five-line mark (three
 lines on narrow terminals). The 33 Node tests and PTY UI checks were rerun
 after this layout change; inference and gateway behavior are unchanged.
 
+## Linked checkout and footer state (0.2.5)
+
+The local npm installation was linked to a checkout without `node_modules`.
+The hardware verifier failed to import `@phala/dcap-qvl`; restoring dependencies
+with `npm ci` restored fresh pinned hardware attestation and a real Oh My Pi
+model response. This was a local installation failure, not evidence of a CVM
+crash. Gateway dispatch continued to fail closed while verification was broken.
+
+A separate footer bug kept the startup badge green indefinitely. Pi and Oh My Pi
+now parse the structured pinned verdict, expire their badge with the earlier of
+receipt expiry and the five-minute check lifetime, and invalidate it on gateway
+verification errors. A missing dependency tree is caught by `ack doctor` and
+before gateway launch. Native UI tests use isolated, clearly synthetic evidence
+and a fake key to test short expiry and local error responses; the live model
+check uses a real pinned attestation independently. The actual Oh My Pi UI
+passed expiry, refresh, and failure-status checks. All 46 Node regressions and
+the PTY console suite passed.
+
 ## Fresh Hermes installation (0.2.4)
 
 A fresh official Hermes install at `d923a5eb48` rejected the old `--base-url`

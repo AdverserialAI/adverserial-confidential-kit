@@ -19,8 +19,8 @@ test('accepts an active P-256 receipt-key policy', async () => {
 });
 
 test('the packaged hardware verifier resolves its bundled runtime', async () => {
-  const source = await readFile(join(process.cwd(), 'resources', 'typescript', 'adverserial-hardware-verify.mjs'), 'utf8');
-  assert.match(source, /from '\.\/dist\/phala\.js'/);
+  const { hardwareRuntimeStatus } = await import('../lib/ack.mjs');
+  assert.equal((await hardwareRuntimeStatus()).ok, true);
 });
 
 test('finds an explicitly configured harness binary without relying on PATH', () => {

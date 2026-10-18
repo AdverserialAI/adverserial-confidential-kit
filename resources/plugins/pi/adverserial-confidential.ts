@@ -8,6 +8,7 @@
  * inference receipt before completing a request.
  */
 import { spawn } from 'node:child_process';
+import { parseVerifierResult, installAttestationStatus } from '../shared/attestation-status.mjs';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,19 +46,22 @@ const verifier = (): VerifierInvocation => {
 	}
 };
 
-const runVerifier = (args: string[] = []): Promise<{ ok: boolean; output: string }> =>
+const runVerifier = (args: string[] = []): Promise<{ ok: boolean; output: string; verdict?: unknown }> =>
 	new Promise((resolve) => {
 		const invocation = verifier();
 		if ('error' in invocation) {
 			resolve({ ok: false, output: invocation.error });
 			return;
 		}
-		const child = spawn(invocation.command, [...invocation.args, ...args], { shell: false, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-		let output = '';
-		child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); });
-		child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); });
+		const child = spawn(invocation.command, [...invocation.args, ...args, '--json'], { shell: false, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+		let stdout = '', stderr = '', oversized = false;
+		child.stdout.on('data', (chunk: Buffer) => {
+			if (stdout.length + chunk.length > 262144) { oversized = true; child.kill('SIGTERM'); return; }
+			stdout += chunk.toString('utf8');
+		});
+		child.stderr.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString('utf8')).slice(-8192); });
 		child.once('error', (error) => resolve({ ok: false, output: `Could not start the attestation verifier: ${error.message}` }));
-		child.once('close', (code) => resolve({ ok: code === 0, output: output.trim() || `Verifier exited ${code ?? 'by signal'}.` }));
+		child.once('close', (code) => resolve(oversized ? { ok: false, output: 'Attestation verifier output exceeded the size limit.' } : parseVerifierResult(code, stdout, stderr)));
 	});
 
 type AckInvocation = { command: string; args: string[] } | { error: string };
@@ -95,13 +99,13 @@ const runAck = (args: string[]): Promise<{ ok: boolean; output: string }> =>
 
 export default async function (pi: ExtensionAPI) {
 	const verdict = await runVerifier();
+	const status = installAttestationStatus(pi, verdict);
 	if (!verdict.ok) {
 		pi.registerCommand('adverserial-verify', {
 			description: 'Run a fresh Adverserial confidential-runtime attestation check',
-			handler: async (_args, ctx) => ctx.ui.notify((await runVerifier()).output, 'warning')
+			handler: async (_args, ctx) => { const result = await runVerifier(); status.update(result, ctx); ctx.ui.notify(result.output + (result.ok ? '\nRestart the harness to load the confidential provider.' : ''), result.ok ? 'info' : 'warning'); }
 		});
 		pi.on('session_start', async (_event, ctx) => {
-			ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg('error', '✕ Adverserial attestation needs attention'));
 			ctx.ui.notify('Adverserial confidential provider is unavailable: attestation did not verify. Run /adverserial-verify for details.', 'error');
 		});
 		return;
@@ -116,7 +120,7 @@ export default async function (pi: ExtensionAPI) {
 		api: 'openai-completions',
 		models: [{
 			id: modelID(),
-			name: 'CyberGLM — verified confidential runtime',
+			name: 'CyberGLM — confidential gateway',
 			reasoning: true,
 			input: ['text'],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -132,6 +136,7 @@ export default async function (pi: ExtensionAPI) {
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 			const result = await runVerifier();
+			status.update(result, _ctx);
 			return { content: [{ type: 'text', text: result.output }], details: { verified: result.ok } };
 		}
 	});
@@ -174,13 +179,12 @@ export default async function (pi: ExtensionAPI) {
 		description: 'Run a fresh Adverserial confidential-runtime attestation check',
 			handler: async (_args, ctx) => {
 			const result = await runVerifier();
-			ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg(result.ok ? 'success' : 'error', result.ok ? '✓ Adverserial attestation verified' : '✕ Adverserial attestation failed'));
+			status.update(result, ctx);
 			ctx.ui.notify(result.output, result.ok ? 'info' : 'error');
 		}
 	});
 
 	pi.on('session_start', async (_event, ctx) => {
-		ctx.ui.setStatus('adverserial-attestation', ctx.ui.theme.fg('success', '✓ Adverserial attestation verified'));
-		ctx.ui.notify('Adverserial confidential runtime verified. Requests use the local receipt-verifying gateway.', 'info');
+		ctx.ui.notify('Requests use the local receipt-verifying gateway. The footer tracks the last check and its expiry.', 'info');
 	});
 }

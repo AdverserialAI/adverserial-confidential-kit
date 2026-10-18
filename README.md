@@ -4,7 +4,7 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.4-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.5-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
@@ -19,6 +19,11 @@ Adverserial inference. Run it as a colorful interactive console or use ordinary
 shell commands.
 
 ![ACK Confidential Console, version 0.2.3](docs/console-home.png)
+
+**New in 0.2.5:** checks the hardware-verifier dependencies before launching a
+coding session. Pi and Oh My Pi footers expire with the proof and clear their
+verified state after a gateway verification failure. Linked source installations
+must run `npm ci` in the checkout; `ack doctor` checks that the verifier can load.
 
 **New in 0.2.4:** Hermes launches with its current supported CLI options; the
 local URL comes from its isolated provider configuration. Failed native launches
@@ -168,7 +173,7 @@ harness interfaces expose verification as follows:
 - **OpenCode:** `/adverserial-attestation`, plus the `adverserial_verify` and
   `adverserial_status` tools.
 - **Pi / Oh My Pi:** `/adverserial-verify`, the `adverserial_verify` tool and
-  an attestation footer.
+  an attestation footer that expires with the proof and clears after verification errors.
 - **Hermes / Kimi:** the supplied `adverserial-verify` skill invokes ACK's
   installed verifier through the harness shell tool.
 - **Every harness:** `ack attestation` remains available from a normal terminal.
