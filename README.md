@@ -4,7 +4,7 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.3-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.4-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
@@ -19,6 +19,10 @@ Adverserial inference. Run it as a colorful interactive console or use ordinary
 shell commands.
 
 ![ACK Confidential Console, version 0.2.3](docs/console-home.png)
+
+**New in 0.2.4:** Hermes launches with its current supported CLI options; the
+local URL comes from its isolated provider configuration. Failed native launches
+keep their diagnostic output visible until you press Enter or Escape.
 
 **New in 0.2.3:** run coding sessions in multiple terminal windows. Each session
 gets its own local gateway and connection settings; closing one leaves the others

@@ -32,7 +32,7 @@ test('fresh Kimi config has a root default and an environment credential; refres
 test('Hermes uses chat query arguments and an isolated named provider without plaintext keys',async t=>{
  const {home,env}=await fixture(t);const launch=await headlessCommand('hermes',state(),env,'hello');
  assert.deepEqual(launch.args.slice(0,3),['chat','--provider','adverserial-confidential']);
- assert.ok(launch.args.includes('--oneshot'));assert.ok(!launch.args.includes('--config'));assert.ok(!launch.args.includes('--print'));
+ assert.ok(launch.args.includes('--oneshot'));assert.ok(!launch.args.includes('--base-url'));assert.ok(!launch.args.includes('--config'));assert.ok(!launch.args.includes('--print'));
  assert.equal(launch.env.HERMES_HOME,join(home,'hermes'));
  const text=await readFile(join(home,'hermes/config.yaml'),'utf8');assert.match(text,/key_env: ADVERSERIAL_API_KEY/);assert.ok(!text.includes(state().apiKey));
  assert.match(await readFile(join(home,'hermes/skills/adverserial-verify/SKILL.md'),'utf8'),/ADVERSERIAL_ACK_CLI/);

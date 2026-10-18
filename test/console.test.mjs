@@ -160,3 +160,28 @@ test('pasted newlines cannot submit a key and cancelling a secret cannot leak it
   assert.equal(terminal.output.data.includes('private-pasted-value'), false);
   app.close(); await finished;
 });
+
+test('failed native harness output stays visible until acknowledged, then restores the console', async () => {
+  const terminal = fakeTerminal();
+  terminal.input.isTTY = terminal.output.isTTY = true;
+  const failure = new Error('Hermes exited with status 2.');
+  const app = new AckConsole(fakeBackend({ run: async () => {
+    terminal.output.write('hermes: error: unrecognized arguments: --example\n');
+    throw failure;
+  } }), terminal);
+  const finished = app.start(); await new Promise(resolve => setImmediate(resolve));
+  const pending = assert.rejects(app.external(['code', 'hermes']), error => error === failure);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.suspended, true);
+  assert.ok(terminal.output.data.includes('hermes: error: unrecognized arguments: --example'));
+  assert.ok(terminal.output.data.includes('Press Enter or Esc to return to ACK'));
+  terminal.input.emit('keypress', 'x', {name: 'x'});
+  assert.equal(app.suspended, true);
+  terminal.input.emit('keypress', '', {name: 'return'});
+  await pending;
+  assert.equal(app.suspended, false);
+  assert.equal(terminal.input.raw, true);
+  assert.equal(terminal.input.listenerCount('keypress'), 1);
+  app.close(); await finished;
+  assert.equal(terminal.input.listenerCount('keypress'), 0);
+});

@@ -8,6 +8,22 @@ The 0.2.2 visual update replaces the large logo with a five-line mark (three
 lines on narrow terminals). The 33 Node tests and PTY UI checks were rerun
 after this layout change; inference and gateway behavior are unchanged.
 
+## Fresh Hermes installation (0.2.4)
+
+A fresh official Hermes install at `d923a5eb48` rejected the old `--base-url`
+argument with exit status 2. ACK now supplies its loopback URL through the named
+provider configuration and environment, without that unsupported argument.
+The existing `6f46e2b9` test above did not cover this newer CLI revision.
+
+The new installation completed a live `ack code hermes` model request and read
+back a random value from a disposable local file through its terminal tool. A
+fresh pinned hardware attestation returned `verified`. The 39 Node regression
+tests include rejection of the removed flag and preservation of failed native
+startup output until acknowledged. Native stdio remains attached to the TTY.
+The installed npm archive also launched Hermes through the console picker,
+generated the exact interactive test response, and restored ACK after exit.
+A real PTY failure check confirmed diagnostics stay visible until Enter.
+
 ## Concurrent sessions (0.2.3)
 
 - Two real `ack code` processes shared an installation and started real Python
