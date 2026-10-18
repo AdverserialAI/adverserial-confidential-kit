@@ -4,7 +4,7 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.1-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.2-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
@@ -70,7 +70,8 @@ first-run theme or workspace-trust dialog; ACK does not bypass those choices.
 | `doctor` / `status` | Inspect installed tools, runtime files, key pins and local configuration. |
 | `motion off` / `motion on` | Disable or enable the activity animation. |
 
-The original Adverserial ASCII logo appears in color beside the wordmark.
+A compact five-line A appears beside the wordmark in a single accent color.
+Narrow terminals use a three-line version.
 Preferences persist locally. Tab completes commands, Up/Down browse in-memory
 history, Escape returns or cancels, Page Up/Down scroll, and Ctrl+L redraws.
 The console handles terminal resizing and restores itself after a harness exits.

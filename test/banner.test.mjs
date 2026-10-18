@@ -15,9 +15,8 @@ test('renders a compact logo with an aligned two-line wordmark', () => {
   const lines = banner.split('\n');
   const title = lines.find((line) => line.includes('ADVERSERIAL CONFIDENTIAL'));
   const subtitle = lines.find((line) => line.includes('Confidential coding kit'));
-  assert.equal(lines.length, 16);
+  assert.equal(lines.length, 5);
   assert.equal(title.indexOf('ADVERSERIAL CONFIDENTIAL'), subtitle.indexOf('Confidential coding kit'));
   assert.ok(lines.every((line) => line.length < 80), 'banner fits an 80-column terminal');
-  assert.ok(lines[0].search(/[^ ]/) > lines.at(-1).search(/[^ ]/), 'left blade slopes toward the lower-left point');
-  assert.match(lines.at(-1), /^\. {3}\.\./, 'left blade ends in a taper rather than a rectangular foot');
+  assert.ok(title.indexOf('ADVERSERIAL CONFIDENTIAL') <= 12, 'wordmark sits next to the small mark');
 });

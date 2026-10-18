@@ -1,8 +1,12 @@
-# ACK 0.2.1 validation
+# ACK 0.2.x validation
 
 Validation performed on macOS (Apple Silicon), Node.js 26.5.0 and Python 3.14.4,
 on October 17–18, 2026. The live model was `lordx64/cyberglm`, selected from the
 public model registry and checked against the active production policy.
+
+The 0.2.2 visual update replaces the large logo with a five-line mark (three
+lines on narrow terminals). The 33 Node tests and PTY UI checks were rerun
+after this layout change; inference and gateway behavior are unchanged.
 
 ## Live harness matrix
 
