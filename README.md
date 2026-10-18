@@ -18,7 +18,14 @@ in an encrypted vault, and connects your preferred coding harness to verified
 Adverserial inference. Run it as a colorful interactive console or use ordinary
 shell commands.
 
-![ACK Confidential Console](docs/console-home.png)
+![ACK Confidential Console, version 0.2.3](docs/console-home.png)
+
+**New in 0.2.3:** run coding sessions in multiple terminal windows. Each session
+gets its own local gateway and connection settings; closing one leaves the others
+running. Runtime installation is coordinated across simultaneous launches.
+
+[Get started on the website](https://adverserial.ai/documentation) ·
+[Release validation](docs/TESTING.md)
 
 ## Install → initialize → code
 
@@ -81,6 +88,11 @@ first frame. The renderer has no additional UI dependencies and updates changed
 rows. `NO_COLOR` disables colors; noninteractive terminals receive command help.
 
 ## Coding harnesses
+
+Choose from nine integrations in the searchable picker. Missing executables are
+clearly marked; install the official harness CLI before selecting it.
+
+![ACK 0.2.3 harness picker showing all nine integrations and local installation status](docs/console-harnesses-0.2.3.png)
 
 ```sh
 ack code claude
