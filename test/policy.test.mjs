@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { resolveHarnessBinary } from '../lib/ack.mjs';
+import { tmpdir } from 'node:os';
+import { configureKimi, resolveHarnessBinary } from '../lib/ack.mjs';
 import { fetchProductionPolicy } from '../lib/ack.mjs';
 
 test('rejects a policy without pinned receipt keys', async () => {
@@ -24,4 +25,24 @@ test('the packaged hardware verifier resolves its bundled runtime', async () => 
 
 test('finds an explicitly configured harness binary without relying on PATH', () => {
   assert.equal(resolveHarnessBinary('codex', { PATH: '', ACK_CODEX_BIN: '/bin/sh' }), '/bin/sh');
+});
+
+test('creates and refreshes an isolated managed Kimi model alias', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'ack-kimi-'));
+  const kimiHome = join(home, '.kimi-code');
+  try {
+    await writeFile(join(home, 'preserved.toml'), '');
+    const env = { HOME: home, KIMI_CODE_HOME: kimiHome };
+    const state = { apiKey: 'test-key', model: 'lordx64/cyberglm' };
+    assert.equal(await configureKimi(state, env), 'adverserial_confidential');
+    let config = await readFile(join(kimiHome, 'config.toml'), 'utf8');
+    assert.match(config, /\[models\.adverserial_confidential\]/);
+    assert.match(config, /model = "lordx64\/cyberglm"/);
+    await configureKimi({ ...state, model: 'lordx64/cyberkimi' }, env);
+    config = await readFile(join(kimiHome, 'config.toml'), 'utf8');
+    assert.equal((config.match(/BEGIN ADVERSERIAL CONFIDENTIAL KIT/g) || []).length, 1);
+    assert.match(config, /model = "lordx64\/cyberkimi"/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
