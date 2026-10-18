@@ -46,6 +46,10 @@ class GatewayAdmissionTests(unittest.TestCase):
                 chunk = connection.recv(4096)
             except socket.timeout:
                 break
+            except ConnectionResetError:
+                if chunks:
+                    break  # macOS may reset after the terminal rejection response.
+                raise
             if not chunk:
                 break
             chunks.append(chunk)

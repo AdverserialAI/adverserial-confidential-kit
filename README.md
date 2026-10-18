@@ -4,7 +4,7 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.2-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.3-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
@@ -122,7 +122,9 @@ ack code codex
 ```
 
 Other overrides are `ACK_CLAUDE_BIN`, `ACK_OPENCODE_BIN`, `ACK_PI_BIN`,
-`ACK_ZCODE_BIN`, `ACK_HERMES_BIN` and `ACK_KIMI_BIN`.
+`ACK_ZCODE_BIN`, `ACK_HERMES_BIN` and `ACK_KIMI_BIN`. Oh My Pi uses its own
+agent state directory; `OMP_CODING_AGENT_DIR` can override it without reusing a
+Pi-specific `PI_CODING_AGENT_DIR` setting.
 
 ## Attestation and verification
 
@@ -199,11 +201,25 @@ policy and pinned receipt keys. For the production model, ACK uses the current
 production policy even if a registry entry still points to an older template.
 An unknown model or inactive policy cannot bypass verification.
 
-ACK starts the loopback gateway for a coding session or swarm, waits for readiness
-and stops its owned gateway when the session finishes. It refreshes the private
-runtime after an ACK version change. An unrelated listener on the requested port
-is not trusted or stopped automatically. The default port is `8787`; select a
-free port with `ADVERSERIAL_GATEWAY_PORT` when running separate sessions.
+ACK starts a separate loopback gateway for each coding session or swarm. The
+operating system assigns a free port, and ACK passes that address to the selected
+harness automatically. You can open multiple terminals and run `ack code` in each;
+closing one stops only its own gateway.
+
+Connection settings are isolated per session under
+`~/.config/adverserial/sessions/`. Codex receives process-local provider overrides;
+OpenCode, ZCode, Kimi and Hermes receive private connection configuration;
+DeepSeek receives a per-invocation patch and a free Web UI port. Kimi links its
+existing session/history directories. Hermes keeps its authority database private
+to each profile, as required by upstream, while linking shared archives and
+memories. Existing profiles and databases are not deleted.
+
+ACK trusts readiness only from the gateway child it launched, through a private
+pipe. It never adopts an unrelated local server based on its health response.
+`ADVERSERIAL_GATEWAY_PORT` can specify a preferred port; if that port is occupied,
+ACK leaves its owner untouched and allocates another port. Shared runtime upgrades
+are serialized across windows, so two launches cannot run pip over the same venv
+at once. Runtime files refresh automatically after an ACK version change.
 
 The gateway exchanges the API key with billing for a scoped entitlement and
 sends encrypted requests to the attested runtime. The model endpoint receives

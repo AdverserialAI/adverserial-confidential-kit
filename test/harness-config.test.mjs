@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import {runInNewContext} from 'node:vm';
 import { harnessCommand, headlessCommand, configureKimi } from '../lib/ack.mjs';
 
 const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'lordx64/cyberglm', endpoint:'https://api.adverserial.ai/v1'});
@@ -38,7 +39,7 @@ test('Hermes uses chat query arguments and an isolated named provider without pl
 });
 test('DeepSeek selects the configured confidential route instead of its official default',async t=>{
  const {home,env}=await fixture(t);const launch=await headlessCommand('deepseek-harness',state(),env,'hello');
- assert.deepEqual(launch.args,['--profile','headless','hello']);
+ assert.deepEqual(launch.args,['--profile','headless','--patch',launch.env.ACK_DSH_PATCH,'hello']);
  const patch=await readFile(join(home,'deepseek-harness/cordis.patch.yml'),'utf8');
  assert.match(patch,/- id: agent-default-model\n  config:\n    provider: adverserial-confidential/);
  assert.match(patch,/apiKeyEnv: ADVERSERIAL_API_KEY/);assert.ok(!patch.includes(state().apiKey));
@@ -78,6 +79,10 @@ test('a policy-bound verifier keeps public pins available when a harness scrubs 
   const script=await readFile(launch.env.ADVERSERIAL_VERIFY_COMMAND,'utf8');
   assert.ok(script.includes('ADVERSERIAL_RECEIPT_KEYS_JSON'));assert.ok(script.includes('public-x'));
   assert.ok(!script.includes(current.apiKey));assert.ok(script.includes('ADVERSERIAL_HARDWARE_VERIFIER_COMMAND'));
+  const context={process:{env:{ADVERSERIAL_RECEIPT_KEYS_FILE:'/existing/keyfile'}}};
+  runInNewContext(script.split('\n').slice(1).join('\n').split('await import(')[0],context);
+  assert.equal(context.process.env.ADVERSERIAL_RECEIPT_KEYS_FILE,'');
+  assert.deepEqual(JSON.parse(context.process.env.ADVERSERIAL_RECEIPT_KEYS_JSON),pins);
  }
 });
 test('ZCode removes only its previous ACK-owned plaintext provider configuration',async t=>{
@@ -86,4 +91,9 @@ test('ZCode removes only its previous ACK-owned plaintext provider configuration
  await harnessCommand('zcode',state(),env);await assert.rejects(readFile(path),/ENOENT/);
  await writeFile(path,JSON.stringify({ownedBy:'someone-else'}));await harnessCommand('zcode',state(),env);
  assert.deepEqual(JSON.parse(await readFile(path,'utf8')),{ownedBy:'someone-else'});
+});
+test('Oh My Pi does not reuse a Pi agent-directory override from another harness',async t=>{
+ const {home,env}=await fixture(t);env.ACK_OMP_BIN='/bin/echo';env.PI_CODING_AGENT_DIR=join(home,'pi');env.OMP_CODING_AGENT_DIR=join(home,'omp');
+ const omp=await harnessCommand('oh-my-pi',state(),env);
+ assert.equal(omp.env.PI_CODING_AGENT_DIR,env.OMP_CODING_AGENT_DIR);assert.notEqual(omp.env.PI_CODING_AGENT_DIR,env.PI_CODING_AGENT_DIR);
 });

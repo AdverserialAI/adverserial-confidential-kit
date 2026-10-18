@@ -8,6 +8,25 @@ The 0.2.2 visual update replaces the large logo with a five-line mark (three
 lines on narrow terminals). The 33 Node tests and PTY UI checks were rerun
 after this layout change; inference and gateway behavior are unchanged.
 
+## Concurrent sessions (0.2.3)
+
+- Two real `ack code` processes shared an installation and started real Python
+  gateways on separate OS-assigned ports, with an unrelated listener occupying
+  their preferred port. The listener was unchanged.
+- Stopping the first process left the second gateway healthy; starting a
+  replacement session also left the second one working.
+- Private per-session connection files were checked for OpenCode, ZCode, Kimi,
+  Hermes and DeepSeek; Codex uses command-line provider overrides.
+- All nine harnesses were rechecked with real model requests and local file tools
+  through dynamically assigned gateways.
+- A live two-worker Pi/Oh My Pi swarm with a Claude lead completed with both
+  worker reports successful and its gateway cleaned up. Pi and Oh My Pi use
+  separate native state directories. Failed workers now produce a nonzero result.
+- Two simultaneous first-run installers completed against one fresh venv. Lock
+  regressions also cover a failing installer followed by successful recovery.
+- A receipt-key source conflict discovered during Pi/Oh My Pi checks was fixed:
+  the bound verifier clears the inherited file source when supplying pinned JSON.
+
 ## Live harness matrix
 
 Each harness made real requests through an isolated local confidential gateway,
@@ -61,13 +80,13 @@ Local automated checks:
 
 ```sh
 npm ci
-npm test                 # 33 Node tests (Keychain-denial case is macOS-only)
+npm test                 # 38 Node tests (Keychain-denial case is macOS-only)
 npm run test:terminal    # real PTY console checks
 npm run smoke
 
 # With the gateway's Python dependencies installed:
 PYTHONPATH=resources/gateway:resources/python \
-  python3 -m unittest discover -s resources/gateway/tests -q  # 34 tests
+  python3 -m unittest discover -s resources/gateway/tests -q  # 35 tests
 ```
 
 Console first-frame checks measured approximately 28–43 ms on this workstation.

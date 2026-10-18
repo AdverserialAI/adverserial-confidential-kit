@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import errno
+from dataclasses import replace
 import hmac
 import os
 import ipaddress
@@ -449,12 +451,29 @@ def is_json_content_type(value: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Loopback-only Adverserial confidential OpenAI gateway")
-    parser.parse_args()
+    parser.add_argument("--port", type=int, default=None, help="listen port; 0 requests an OS-assigned port")
+    parser.add_argument("--ready-fd", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--fallback-port", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.port is not None and not 0 <= args.port <= 65535:
+        parser.error("port must be between 0 and 65535")
     try:
         config = Config.from_env()
     except ConfigError as exc:
         raise SystemExit(f"configuration error: {exc}")
+    if args.port is not None:
+        config = replace(config, listen_port=args.port)
     Handler.dispatcher = Dispatcher(config)
-    server = BoundedThreadingHTTPServer((config.listen_host, config.listen_port), Handler)
-    print(f"adverserial confidential gateway listening on http://{config.listen_host}:{config.listen_port}", flush=True)
+    try:
+        server = BoundedThreadingHTTPServer((config.listen_host, config.listen_port), Handler)
+    except OSError as exc:
+        if not args.fallback_port or exc.errno != errno.EADDRINUSE:
+            raise
+        server = BoundedThreadingHTTPServer((config.listen_host, 0), Handler)
+    port = server.server_address[1]
+    if args.ready_fd is not None:
+        with os.fdopen(args.ready_fd, "w") as ready:
+            ready.write(json.dumps({"port": port, "pid": os.getpid()}) + "\n")
+            ready.flush()
+    print(f"adverserial confidential gateway listening on http://{config.listen_host}:{port}", flush=True)
     server.serve_forever()
