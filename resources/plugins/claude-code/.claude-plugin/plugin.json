@@ -1,6 +1,6 @@
 {
   "name": "adverserial-verify-claude",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Verify the attestation of the Adverserial confidential inference endpoint (TDX evidence + ES256 receipt) before trusting it with sensitive prompts.",
   "author": {
     "name": "Adverserial AI"
