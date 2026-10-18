@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { resolveHarnessBinary } from '../lib/ack.mjs';
 import { fetchProductionPolicy } from '../lib/ack.mjs';
 
 test('rejects a policy without pinned receipt keys', async () => {
@@ -19,4 +20,8 @@ test('accepts an active P-256 receipt-key policy', async () => {
 test('the packaged hardware verifier resolves its bundled runtime', async () => {
   const source = await readFile(join(process.cwd(), 'resources', 'typescript', 'adverserial-hardware-verify.mjs'), 'utf8');
   assert.match(source, /from '\.\/dist\/phala\.js'/);
+});
+
+test('finds an explicitly configured harness binary without relying on PATH', () => {
+  assert.equal(resolveHarnessBinary('codex', { PATH: '', ACK_CODEX_BIN: '/bin/sh' }), '/bin/sh');
 });
