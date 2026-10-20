@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json
+import math
 import secrets
 import time
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, Mapping, Optional
@@ -222,12 +223,19 @@ class VerifiedSession:
     def proof(self) -> VerifiedProof:
         return self._proof
 
+    def _require_fresh_proof(self) -> None:
+        expires = self._proof.expires_epoch
+        if isinstance(expires, bool) or not isinstance(expires, (int, float)) or not math.isfinite(expires) or expires <= time.time():
+            raise VerificationError("the verified confidential proof has expired or has an invalid expiry; verify the endpoint again")
+
     def _connect(self) -> PinnedHTTPSConnection:
+        self._require_fresh_proof()
         return PinnedHTTPSConnection(
             self._host,
             self._port,
             expected_spki_sha256=self._proof.tls_spki_sha256,
             timeout=self._timeout,
+            validate_proof=self._require_fresh_proof,
         )
 
     def _new_request_nonce(self) -> Optional[str]:
@@ -342,6 +350,7 @@ class VerifiedSession:
         try:
             headers = self._headers({"Content-Type": "application/json", "X-Adverserial-Nonce": nonce})
             headers[ENCAPSULATED_KEY_HEADER] = encrypted.encapsulated_key.hex()
+            connection.connect()
             self.dispatched = True
             connection.request("POST", self._base_path + "/chat/completions", body=encrypted.body, headers=headers)
             response = connection.getresponse()
@@ -375,6 +384,7 @@ class VerifiedSession:
             headers = self._headers({"Content-Type": "application/json"})
             if nonce:
                 headers["X-Adverserial-Nonce"] = nonce
+            connection.connect()
             self.dispatched = True
             connection.request(
                 "POST", self._base_path + "/chat/completions", body=body, headers=headers
@@ -422,8 +432,9 @@ class VerifiedSession:
         connection = self._connect()
         headers = self._headers({"Content-Type": "application/json", "Accept": "text/event-stream", "X-Adverserial-Nonce": nonce})
         headers[ENCAPSULATED_KEY_HEADER] = encrypted.encapsulated_key.hex()
-        self.dispatched = True
         try:
+            connection.connect()
+            self.dispatched = True
             connection.request("POST", self._base_path + "/chat/completions", body=encrypted.body, headers=headers)
             response = connection.getresponse()
             if response.status != 200:
@@ -502,8 +513,9 @@ class VerifiedSession:
         )
         if nonce:
             headers["X-Adverserial-Nonce"] = nonce
-        self.dispatched = True
         try:
+            connection.connect()
+            self.dispatched = True
             connection.request(
                 "POST", self._base_path + "/chat/completions", body=body, headers=headers
             )

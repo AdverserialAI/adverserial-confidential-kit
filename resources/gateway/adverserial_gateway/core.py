@@ -207,6 +207,9 @@ class Dispatcher:
         return entitlement
 
     def completion(self, api_key: str, payload: Mapping[str, Any]):
+        count = payload.get("n", 1)
+        if count is not None and (isinstance(count, bool) or not isinstance(count, int) or count != 1):
+            raise ClientRequestError("Only one completion per request is supported (n must be 1)")
         if payload.get("stream") is not None and not isinstance(payload["stream"], bool):
             raise ClientRequestError("stream must be a boolean or null")
         model = payload.get("model")

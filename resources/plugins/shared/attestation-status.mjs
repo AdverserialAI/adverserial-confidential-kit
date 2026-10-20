@@ -4,7 +4,7 @@ export function verificationDeadline(verdict, now = Date.now()) {
   const verifiedAt = verdict?.verifiedAt;
   const expires = verdict?.proof?.expiresEpoch * 1000;
   if (verdict?.status !== 'verified' || verdict.trust !== 'pinned' || verdict.proof?.devMode !== false ||
-      !Number.isFinite(verifiedAt) || verifiedAt > now + 5000 || !Number.isFinite(expires)) return 0;
+      !Number.isFinite(verifiedAt) || verifiedAt > now + 5000 || !Number.isFinite(verdict?.proof?.expiresEpoch) || !Number.isFinite(expires)) return 0;
   const deadline = Math.min(expires, verifiedAt + 300_000);
   return deadline > now ? deadline : 0;
 }

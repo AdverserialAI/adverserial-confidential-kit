@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import http.client
 import ssl
-from typing import Optional
+from typing import Callable, Optional
 
 from cryptography import x509
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -59,13 +59,17 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
         *,
         expected_spki_sha256: str,
         timeout: float = 60.0,
+        validate_proof: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(
             host, port, context=attestation_ssl_context(), timeout=timeout
         )
         self._expected_spki_sha256 = expected_spki_sha256
+        self._validate_proof = validate_proof
 
     def connect(self) -> None:
+        if self._validate_proof is not None:
+            self._validate_proof()
         super().connect()
         assert self.sock is not None
         peer_der = self.sock.getpeercert(binary_form=True)
@@ -77,3 +81,9 @@ class PinnedHTTPSConnection(http.client.HTTPSConnection):
                 f"{actual!r} does not match the attested "
                 f"{self._expected_spki_sha256!r}. Refusing to send the request."
             )
+        try:
+            if self._validate_proof is not None:
+                self._validate_proof()
+        except Exception:
+            self.close()
+            raise

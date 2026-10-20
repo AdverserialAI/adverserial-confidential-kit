@@ -10,13 +10,14 @@ from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
-from adverserial import UpstreamHTTPError
+from adverserial import UpstreamHTTPError, VerificationError
 from adverserial_gateway.config import Config
 from adverserial_gateway.core import (
     ClientRequestError,
     Dispatcher,
     OutcomeUnknownError,
     UpstreamRejected,
+    VerificationFailed,
     canonical_model_id,
 )
 
@@ -63,11 +64,26 @@ class CoreTests(unittest.TestCase):
                 self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": []})
             release.assert_called_once_with("sk-" + "x" * 24, "signed-entitlement")
 
+    def test_expired_cached_proof_is_never_reused_when_refresh_fails(self):
+        model = "lordx64/cyberglm"
+        self.dispatcher._proofs[model].proof = SimpleNamespace(model_id=model, expires_epoch=0, dev_mode=False)
+        with patch("adverserial_gateway.core.verify_endpoint", side_effect=VerificationError("fixture rejection")), patch.object(self.dispatcher, "entitlement") as billing:
+            with self.assertRaises(VerificationFailed):
+                self.dispatcher.completion("sk-" + "x" * 24, {"model": model, "messages": []})
+            billing.assert_not_called()
+
     def test_invalid_stream_flags_fail_before_billing(self):
         for value in ("false", 1, [], {}):
             with self.subTest(value=value), patch.object(self.dispatcher, "proof_for") as proof:
                 with self.assertRaises(ClientRequestError):
                     self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": value})
+                proof.assert_not_called()
+
+    def test_multiple_completions_cannot_escape_single_output_reservation(self):
+        for count in (0, 2, 1000, True, "2", 1.5):
+            with self.subTest(count=count), patch.object(self.dispatcher, "proof_for") as proof:
+                with self.assertRaises(ClientRequestError):
+                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "n": count})
                 proof.assert_not_called()
 
     def test_null_stream_is_normalized_to_false(self):

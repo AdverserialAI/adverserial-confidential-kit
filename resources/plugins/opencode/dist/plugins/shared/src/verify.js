@@ -5,6 +5,7 @@
  */
 import { toBase64Url, verifyEndpoint } from '../../../typescript/src/index.js';
 import { hardwareVerifier } from './hardware.js';
+import { isFreshVerdict } from './format.js';
 export const CACHE_TTL_MS = 5 * 60_000;
 export const FETCH_TIMEOUT_MS = 15_000;
 export const summarizeConfig = (config) => ({
@@ -103,7 +104,8 @@ export const runVerification = async (config, deps) => {
         // the only legitimate opt-in here is the dev-only TOFU escape hatch.
         allowDevMode: config.trustEvidenceKey,
         verifyHardwareEvidence: hardwareVerifier(config.hardwareVerifierCommand),
-        fetchImpl
+        fetchImpl,
+        now: deps?.now
     });
     if (result.status === 'verified') {
         return { status: 'verified', trust, proof: result.proof, verifiedAt, config: summary };
@@ -125,7 +127,8 @@ export class VerificationCache {
     }
     async get(config, deps) {
         const now = this.#now();
-        if (this.#current && now - this.#current.verifiedAt < this.#ttlMs) {
+        if (this.#current && now >= this.#current.verifiedAt && now - this.#current.verifiedAt < this.#ttlMs &&
+            (this.#current.status !== 'verified' || isFreshVerdict(this.#current, now, this.#ttlMs))) {
             return { verdict: this.#current, ageMs: now - this.#current.verifiedAt, fromCache: true };
         }
         this.#inflight ??= runVerification(config, deps)

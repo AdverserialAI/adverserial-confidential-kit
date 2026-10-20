@@ -33812,7 +33812,7 @@ var verifyEndpoint = async (baseURL, options) => {
       throw new Error("expected endpoint must equal the origin of baseURL.");
     }
     const fetchImpl = options.fetchImpl ?? fetch;
-    const nowMs = options.now?.() ?? Date.now();
+    const clock = options.now ?? Date.now;
     const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
     const attestationUrl = new URL(options.attestationUrl ?? "/attestation", endpoint);
     if (attestationUrl.protocol !== "https:" || attestationUrl.origin !== endpoint.origin) {
@@ -33833,6 +33833,7 @@ var verifyEndpoint = async (baseURL, options) => {
     const { claims, keyId } = await verifyReceiptSignature(receipt, options.trustedReceiptKeys);
     const issuedAt = asEpochSeconds(claims.iat, "iat");
     const expiresAt = asEpochSeconds(claims.exp, "exp");
+    const nowMs = clock();
     if (expiresAt * 1e3 <= nowMs) throw new Error("The verification receipt has expired.");
     if (issuedAt * 1e3 > nowMs + ONE_MINUTE_MS) {
       throw new Error("The verification receipt was issued in the future.");
@@ -33924,6 +33925,8 @@ var verifyEndpoint = async (baseURL, options) => {
         throw new Error("The evidence EHBP key configuration does not contain its quote-bound public key.");
       }
     }
+    if (expiresAt * 1000 <= clock())
+      throw new Error("The verification receipt expired during hardware verification.");
     return {
       status: "verified",
       proof: {
@@ -34198,12 +34201,16 @@ var formatVerdict = (verdict, now = Date.now()) => {
   }
   return lines.join("\n");
 };
+var isFreshVerdict = (verdict, now = Date.now(), ttlMs = 300000) =>
+  verdict?.status === "verified" && verdict.trust === "pinned" && verdict.proof?.devMode === false &&
+  Number.isFinite(verdict.verifiedAt) && verdict.verifiedAt <= now + 5000 && now - verdict.verifiedAt < ttlMs &&
+  Number.isFinite(verdict.proof.expiresEpoch) && verdict.proof.expiresEpoch * 1000 > now;
 var formatStatus = (entry, ttlMs, now = Date.now()) => {
   if (!entry) {
     return "attestation status: never verified in this process \u2014 run the verification first (it also runs lazily on the first tool call).";
   }
   const { verdict, ageMs, fromCache } = entry;
-  const freshness = ageMs < ttlMs ? `fresh, ttl ${humanDuration(ttlMs)}` : "STALE (older than ttl)";
+  const freshness = isFreshVerdict(verdict, now, ttlMs) ? `fresh, ttl ${humanDuration(ttlMs)}` : "STALE OR UNVERIFIED";
   const head = `attestation status: ${verdictHeader(verdict)} \u2014 ` + (fromCache ? `verified ${humanDuration(ageMs)} ago (${freshness})` : "just verified (fresh check)");
   return `${head}
 ${formatVerdict(verdict, now)}`;
@@ -34289,13 +34296,16 @@ ${USAGE}`);
       console.log("attestation status: no cached verdict \u2014 run adverserial-verify first.");
       return 1;
     }
+    const fresh = isFreshVerdict(entry.verdict, Date.now(), CACHE_TTL_MS);
+    const verdict = entry.verdict.status === "verified" && !fresh
+      ? { ...entry.verdict, status: "failed", reason: "Cached attestation is expired, unpinned, synthetic or incomplete; run a fresh verification." }
+      : entry.verdict;
     if (flags.has("--json")) {
-      console.log(JSON.stringify({ ...entry.verdict, ageMs: entry.ageMs }, null, 2));
+      console.log(JSON.stringify({ ...verdict, ageMs: entry.ageMs }, null, 2));
     } else {
-      console.log(formatStatus(entry, CACHE_TTL_MS));
+      console.log(formatStatus({ ...entry, verdict }, CACHE_TTL_MS));
     }
-    const fresh = entry.ageMs < CACHE_TTL_MS;
-    return entry.verdict.status === "verified" && fresh ? 0 : 1;
+    return verdict.status === "verified" && fresh ? 0 : 1;
   }
   let config;
   try {

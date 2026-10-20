@@ -86,7 +86,7 @@ export const verifyEndpoint = async (baseURL, options) => {
             throw new Error('expected endpoint must equal the origin of baseURL.');
         }
         const fetchImpl = options.fetchImpl ?? fetch;
-        const nowMs = options.now?.() ?? Date.now();
+        const clock = options.now ?? Date.now;
         const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
         const attestationUrl = new URL(options.attestationUrl ?? '/attestation', endpoint);
         if (attestationUrl.protocol !== 'https:' || attestationUrl.origin !== endpoint.origin) {
@@ -111,6 +111,7 @@ export const verifyEndpoint = async (baseURL, options) => {
         const { claims, keyId } = await verifyReceiptSignature(receipt, options.trustedReceiptKeys);
         const issuedAt = asEpochSeconds(claims.iat, 'iat');
         const expiresAt = asEpochSeconds(claims.exp, 'exp');
+        const nowMs = clock();
         if (expiresAt * 1000 <= nowMs)
             throw new Error('The verification receipt has expired.');
         if (issuedAt * 1000 > nowMs + ONE_MINUTE_MS) {
@@ -215,6 +216,8 @@ export const verifyEndpoint = async (baseURL, options) => {
                 throw new Error('The evidence EHBP key configuration does not contain its quote-bound public key.');
             }
         }
+        if (expiresAt * 1000 <= clock())
+            throw new Error('The verification receipt expired during hardware verification.');
         return {
             status: 'verified',
             proof: {
