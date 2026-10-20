@@ -207,8 +207,9 @@ def _responses_message(item: Mapping[str, Any]) -> dict[str, Any]:
 def _responses_tools(value: Any) -> list[dict[str, Any]]:
     """Translate only tools executable by the local coding client.
 
-    Codex includes two provider-hosted tool classes in every Responses request:
-    ``web_search`` and a ``namespace`` for its hosted multi-agent runtime.
+    Codex can include optional provider-hosted tool declarations such as
+    ``web_search``, ``image_generation`` and a hosted multi-agent ``namespace``
+    even for ordinary text requests.
     They cannot be carried to the confidential OpenAI-compatible runtime: they
     would either require a provider-side service or advertise calls the local
     client cannot execute after conversion. Ignore those optional tools so
@@ -224,7 +225,7 @@ def _responses_tools(value: Any) -> list[dict[str, Any]]:
         if not isinstance(tool, Mapping):
             raise ClientRequestError("Responses tools must contain objects")
         kind = tool.get("type")
-        if kind in {"web_search", "namespace"}:
+        if kind in {"web_search", "image_generation", "namespace"}:
             continue
         if kind != "function" or not isinstance(tool.get("name"), str) or not tool["name"]:
             raise ClientRequestError(f"Responses tool type {kind!r} is unavailable through the confidential gateway")
@@ -309,6 +310,8 @@ def responses_to_chat(payload: Mapping[str, Any]) -> dict[str, Any]:
     if tools:
         out["tools"] = tools
     choice = _responses_tool_choice(payload.get("tool_choice"))
+    if choice == "required" and not tools:
+        raise ClientRequestError("Responses tool_choice required needs at least one supported local function tool")
     if choice is not None:
         out["tool_choice"] = choice
     return out

@@ -40,9 +40,20 @@ class CompatibilityTests(unittest.TestCase):
                 {"type": "function", "name": "exec_command", "description": "local shell", "parameters": {"type": "object"}, "strict": True},
                 {"type": "namespace", "name": "multi_agent_v1", "tools": [{"type": "function", "name": "spawn_agent", "parameters": {"type": "object"}}]},
                 {"type": "web_search", "external_web_access": True},
+                {"type": "image_generation", "output_format": "png"},
             ],
         })
         self.assertEqual([tool["function"]["name"] for tool in chat["tools"]], ["exec_command"])
+
+    def test_responses_optional_image_generation_does_not_block_plain_text(self):
+        chat = responses_to_chat({"input": "hello", "tools": [{"type": "image_generation"}], "tool_choice": "auto"})
+        self.assertEqual(chat["messages"], [{"role": "user", "content": "hello"}])
+        self.assertNotIn("tools", chat)
+
+    def test_responses_cannot_force_unsupported_image_generation(self):
+        for choice in ({"type": "image_generation"}, "required"):
+            with self.subTest(choice=choice), self.assertRaises(ClientRequestError):
+                responses_to_chat({"input": "draw a cat", "tools": [{"type": "image_generation"}], "tool_choice": choice})
 
     def test_responses_rejects_an_unknown_hosted_tool_class(self):
         with self.assertRaisesRegex(ClientRequestError, "unavailable"):

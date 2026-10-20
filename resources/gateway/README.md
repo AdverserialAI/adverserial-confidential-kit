@@ -49,9 +49,11 @@ same attestation → entitlement → pinned direct-TLS → signed-receipt path:
 
 Function definitions, function calls, function call outputs, and streamed
 function argument deltas are preserved across Claude Messages and Responses.
-Codex's local function tools are forwarded normally. Its hosted `web_search`
-and hosted multi-agent namespace are intentionally omitted from the model
-request: neither can execute through a private, direct-only runtime.
+Codex's local function tools are forwarded normally. Optional hosted
+`web_search`, `image_generation`, and multi-agent namespace declarations are
+omitted from the model request: they cannot execute through a private,
+direct-only runtime. An explicit hosted-tool choice is still rejected, as is
+`tool_choice: required` when no supported local function remains.
 Image/document blocks, other hosted provider tools, and provider-side
 conversation state are rejected deliberately. The caller must resend complete
 text and function-call history; this avoids keeping prompt history at the
