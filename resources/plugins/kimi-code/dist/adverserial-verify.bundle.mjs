@@ -33978,10 +33978,12 @@ var decoder2 = new TextDecoder();
 
 // ../shared/src/hardware.ts
 import { spawn } from "node:child_process";
+import { isAbsolute as isAbsoluteHardwareNode } from 'node:path';
 var MAX_OUTPUT = 64 << 10;
 var TIMEOUT_MS = 2e4;
 var readOutput = (command, input) => new Promise((resolve, reject) => {
-  const child = spawn(command, [], { shell: false, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  if (/\.m?js$/.test(command) && !isAbsoluteHardwareNode(process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath)) return reject(new Error('ADVERSERIAL_NODE_EXECUTABLE must be an absolute executable path.'));
+    const child = spawn(/\.m?js$/.test(command) ? (process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath) : command, /\.m?js$/.test(command) ? [command] : [], { shell: false, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   let stdout = "";
   let stderr = "";
   let exceeded = false;

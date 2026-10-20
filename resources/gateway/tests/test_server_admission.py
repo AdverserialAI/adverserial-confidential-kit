@@ -46,9 +46,9 @@ class GatewayAdmissionTests(unittest.TestCase):
                 chunk = connection.recv(4096)
             except socket.timeout:
                 break
-            except ConnectionResetError:
+            except (ConnectionResetError, ConnectionAbortedError):
                 if chunks:
-                    break  # macOS may reset after the terminal rejection response.
+                    break  # macOS/Windows may reset after the terminal rejection response.
                 raise
             if not chunk:
                 break
@@ -70,7 +70,14 @@ class GatewayAdmissionTests(unittest.TestCase):
         second = self._connect()
         self.addCleanup(second.close)
         second.sendall(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        response = self._read_response(second)
+        try:
+            response = self._read_response(second)
+        except (ConnectionResetError, ConnectionAbortedError):
+            # Admission can reject immediately after accept, before sendall
+            # arrives. Windows may reset that socket before delivering the 503.
+            # The overload contract permits a close; no second handler is run.
+            self.assertFalse(self.server._connection_slots.acquire(blocking=False))
+            return
         self.assertTrue(response.startswith(b"HTTP/1.1 503"), response)
         self.assertIn(b"Connection: close", response)
 

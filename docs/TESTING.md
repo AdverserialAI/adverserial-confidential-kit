@@ -131,7 +131,7 @@ This is a local UI measurement, not an inference-latency promise.
 This report covers the versions above and the currently published CyberGLM
 configuration. It does not assert that every upstream release, OS, terminal,
 model, arbitrary plugin combination or possible swarm permutation was tested.
-Linux and Windows encrypted credential stores are not implemented in this release.
+Linux encrypted credential storage is not implemented. Windows DPAPI is covered below.
 
 Some live requests encountered temporary backend-warming 503 responses; the
 harnesses retried and completed. A sandboxed Codex/DeepSeek shell may deny the
@@ -144,3 +144,27 @@ The ZCode source build reported a missing optional built-in provider catalog;
 its explicitly configured confidential provider and tool calls still passed.
 Upstream first-run theme, telemetry and workspace-trust prompts remain upstream
 choices; ACK does not disable them.
+
+
+## Windows compatibility validation (2026-10-20)
+
+Tested locally on Windows with Node 24.20.0 and Python 3.14.7:
+
+- Node suite: 52 passed, 1 macOS-only Keychain test skipped.
+- Gateway suite: 36 passed, including real Windows installer locking and the
+  pinned Node hardware-verifier bridge.
+- Python SDK suite: 42 passed, including actual Python adapter subprocesses.
+- `node test/runtime-smoke.mjs`: real isolated venv installation, two independent
+  gateways, health responses, shutdown without a listening gateway left behind.
+- Real Windows DPAPI: encrypted profile migration, reopening, concurrent storage
+  key creation, corruption refusal and missing-key refusal.
+- Installed Claude Code 2.1.288 and npm Codex 0.124.0: detection and configured
+  launch argument smoke checks, plus actual headless requests to a local rejecting
+  server (`/v1/responses` and `/v1/messages`). The deliberate rejection exits
+  Codex with status 1; Claude retries and was stopped after 45 seconds. Desktop-bundled Codex 0.163.0-alpha.10.2:
+  discovery and version execution.
+
+Tests use dummy credentials. These checks do not certify live inference,
+upstream billing, or every harness's Windows support. The CI matrix runs the
+Node and Python suites plus real runtime startup on Windows, macOS and Linux;
+Linux runtime tests do not imply Linux vault support.

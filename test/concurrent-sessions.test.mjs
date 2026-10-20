@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {mkdtemp,mkdir,writeFile,readFile,rm,realpath} from 'node:fs/promises';
@@ -5,13 +6,14 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {startSessionGateway,harnessCommand} from '../lib/ack.mjs';
+import {startSessionGateway as realStartSessionGateway,harnessCommand} from '../lib/ack.mjs';
+const startSessionGateway=(state,env)=>realStartSessionGateway(state,env,{spawnImpl:(_command,args,options)=>spawn(process.execPath,[join(env.ACK_HOME,'gateway.cjs'),...args.slice(2)],options)});
 const state=()=>({apiKey:'sk-test-configuration-only',model:'lordx64/cyberglm',endpoint:'https://api.adverserial.ai/v1'});
 async function fixture(t){
  const home=await mkdtemp(join(tmpdir(),'ack-concurrent-'));t.after(()=>rm(home,{recursive:true,force:true}));
  await mkdir(join(home,'venv/bin'),{recursive:true});
- const stub=`#!${process.execPath}\nconst http=require('node:http'),fs=require('node:fs');const port=Number(process.argv[process.argv.indexOf('--port')+1]);const server=http.createServer((req,res)=>res.end('owned'));server.on('error',e=>e.code==='EADDRINUSE'?server.listen(0,'127.0.0.1'):process.exit(1));server.on('listening',()=>{fs.writeSync(3,JSON.stringify({port:server.address().port,pid:process.env.ACK_BAD_PID?'wrong':process.pid})+'\\n');fs.closeSync(3)});server.listen(port,'127.0.0.1');`;
- await writeFile(join(home,'venv/bin/adverserial-confidential-gateway'),stub,{mode:0o700});
+ const stub=`#!${process.execPath}\nconst http=require('node:http'),fs=require('node:fs');const port=Number(process.argv[process.argv.indexOf('--port')+1]);const server=http.createServer((req,res)=>res.end('owned'));server.on('error',e=>e.code==='EADDRINUSE'?server.listen(0,'127.0.0.1'):process.exit(1));server.on('listening',()=>{fs.writeSync(1,JSON.stringify({port:server.address().port,pid:process.env.ACK_BAD_PID?'wrong':process.pid})+'\\n');});server.listen(port,'127.0.0.1');`;
+ await writeFile(join(home,'gateway.cjs'),stub,{mode:0o700});
  return {home,env:{...process.env,ACK_HOME:home,ADVERSERIAL_GATEWAY_PORT:''}};
 }
 async function stop(child){const closed=once(child,'close');child.kill('SIGTERM');await closed;}
@@ -32,7 +34,7 @@ test('an unrelated health response cannot forge child readiness',async t=>{
  const {env}=await fixture(t);await assert.rejects(startSessionGateway(state(),{...env,ACK_BAD_PID:'1'}),/could not start/);
 });
 test('session-specific connection files cannot replace another window configuration or its stored history',async t=>{
- const {home,env}=await fixture(t);Object.assign(env,{PATH:'',ACK_KIMI_BIN:'/bin/echo',ACK_HERMES_BIN:'/bin/echo',ACK_ZCODE_BIN:'/bin/echo',ACK_DSH_BIN:'/bin/echo',ACK_OPENCODE_BIN:'/bin/echo',KIMI_CODE_HOME:join(home,'original-kimi')});
+ const {home,env}=await fixture(t);Object.assign(env,{PATH:'',ACK_KIMI_BIN:process.execPath,ACK_HERMES_BIN:process.execPath,ACK_ZCODE_BIN:process.execPath,ACK_DSH_BIN:process.execPath,ACK_OPENCODE_BIN:process.execPath,KIMI_CODE_HOME:join(home,'original-kimi')});
  await mkdir(join(env.KIMI_CODE_HOME,'sessions'),{recursive:true});await writeFile(join(env.KIMI_CODE_HOME,'sessions/keep.txt'),'keep-history');
  for(const name of ['kimi','hermes','zcode','deepseek-harness','opencode']){
   const a=await harnessCommand(name,state(),{...env,ACK_SESSION_HOME:join(home,'a'),ADVERSERIAL_GATEWAY_PORT:'18881'});

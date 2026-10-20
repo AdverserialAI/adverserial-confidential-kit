@@ -1,9 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(root, 'bin', 'ack.mjs');
 const ansi = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 

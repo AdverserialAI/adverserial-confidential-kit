@@ -24,15 +24,15 @@ test('the packaged hardware verifier resolves its bundled runtime', async () => 
 });
 
 test('finds an explicitly configured harness binary without relying on PATH', () => {
-  assert.equal(resolveHarnessBinary('codex', { PATH: '', ACK_CODEX_BIN: '/bin/sh' }), '/bin/sh');
+  assert.equal(resolveHarnessBinary('codex', { PATH: '', ACK_CODEX_BIN: process.execPath }), process.execPath);
 });
 
 test('launches Oh My Pi with the Node-backed bundled verifier', async () => {
   const selected = await harnessCommand('oh-my-pi', { apiKey: 'test-key', model: 'lordx64/cyberglm' }, {
-    HOME: tmpdir(), PATH: '', ACK_OMP_BIN: '/bin/echo'
+    HOME: tmpdir(), PATH: '', ACK_OMP_BIN: process.execPath
   });
-  assert.equal(selected.command, '/bin/echo');
-  assert.match(selected.env.ADVERSERIAL_VERIFY_COMMAND, /plugins\/adverserial-verify\/bin\/adverserial-verify$/);
+  assert.equal(selected.command, process.execPath);
+  assert.match(selected.env.ADVERSERIAL_VERIFY_COMMAND, /plugins[\\/]adverserial-verify[\\/]bin[\\/]adverserial-verify\.mjs$/);
   assert.match(selected.args.join(' '), /adverserial-confidential\/lordx64\/cyberglm/);
 });
 

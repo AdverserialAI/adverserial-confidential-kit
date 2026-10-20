@@ -30,8 +30,13 @@ const verifier = (): VerifierInvocation => {
 		try {
 			const command = realpathSync(configured);
 			if (!statSync(command).isFile()) throw new Error('not a file');
-			accessSync(command, constants.X_OK);
-			return { command, args: [] };
+			accessSync(command, /\.m?js$/.test(command) ? constants.R_OK : constants.X_OK);
+			if (/\.m?js$/.test(command)) {
+                const node = process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath;
+                if (!isAbsolute(node) || !statSync(node).isFile()) throw new Error('invalid Node executable');
+                return { command: node, args: [command] };
+            }
+            return { command, args: [] };
 		} catch {
 			return { error: 'ADVERSERIAL_VERIFY_COMMAND must name an executable file.' };
 		}
