@@ -185,7 +185,9 @@ harness interfaces expose verification as follows:
   `$adverserial-verify` or `/skills`. ACK also installs `$adverserial-attestation`
   and `/prompts:adverserial-attestation` for CLI versions supporting custom
   prompts. Restart Codex after installation. A Claude-style custom attestation
-  status line is not provided by this integration.
+  status line is not provided by this integration. If marketplace plugin setup
+  fails, ACK reports it and continues with the bundled local attestation skill
+  and verifier; confidential inference verification remains enforced.
 - **OpenCode:** `/adverserial-attestation`, plus the `adverserial_verify` and
   `adverserial_status` tools.
 - **Pi / Oh My Pi:** `/adverserial-verify`, the `adverserial_verify` tool and
