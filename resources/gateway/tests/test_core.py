@@ -3,6 +3,10 @@ import sys
 import tempfile
 import unittest
 import urllib.request
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,6 +34,41 @@ class CoreTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_concurrent_cold_and_expired_proofs_verify_once(self):
+        model = "lordx64/cyberglm"
+        for _ in range(3):
+            barrier = threading.Barrier(16)
+            proof = SimpleNamespace(model_id=model, expires_epoch=int(time.time()) + 600, dev_mode=False)
+            def verify(*_args, **_kwargs):
+                time.sleep(0.05)
+                return proof
+            def request(_index):
+                barrier.wait(timeout=5)
+                return self.dispatcher.proof_for(model)
+            with patch("adverserial_gateway.core.verify_endpoint", side_effect=verify) as verifier:
+                with ThreadPoolExecutor(max_workers=16) as pool:
+                    results = list(pool.map(request, range(16)))
+                self.assertTrue(all(item is proof for item in results))
+                self.assertEqual(verifier.call_count, 1)
+            proof.expires_epoch = 0
+
+    def test_session_constructor_failure_releases_reservation(self):
+        with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
+            self.dispatcher, "entitlement", return_value="signed-entitlement"
+        ), patch.object(self.dispatcher, "release_reservation") as release, patch(
+            "adverserial_gateway.core.VerifiedSession", side_effect=ValueError("invalid session")
+        ):
+            with self.assertRaises(ValueError):
+                self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": []})
+            release.assert_called_once_with("sk-" + "x" * 24, "signed-entitlement")
+
+    def test_invalid_stream_flags_fail_before_billing(self):
+        for value in ("false", 1, [], {}, None):
+            with self.subTest(value=value), patch.object(self.dispatcher, "proof_for") as proof:
+                with self.assertRaises(ClientRequestError):
+                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": value})
+                proof.assert_not_called()
 
     def test_unknown_models_cannot_reach_the_entitlement_exchange(self):
         with self.assertRaises(ClientRequestError):

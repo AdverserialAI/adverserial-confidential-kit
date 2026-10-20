@@ -5,6 +5,11 @@ from adverserial_gateway.core import ClientRequestError
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_responses_rejects_invalid_output_limits(self):
+        for value in (0, -1, False, True, "20", 1.5):
+            with self.subTest(value=value), self.assertRaises(ClientRequestError):
+                responses_to_chat({"input": "hello", "max_output_tokens": value})
+
     def test_anthropic_text_is_translated_without_dropping_system(self):
         chat = anthropic_to_chat({"system": "Be precise", "max_tokens": 50, "messages": [{"role": "user", "content": [{"type": "text", "text": "hello"}]}]})
         self.assertEqual(chat["messages"], [{"role": "system", "content": "Be precise"}, {"role": "user", "content": "hello"}])
