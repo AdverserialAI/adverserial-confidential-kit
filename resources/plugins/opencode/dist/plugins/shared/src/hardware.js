@@ -8,10 +8,12 @@
  * It receives no API key, prompt, completion, or customer identity.
  */
 import { spawn } from 'node:child_process';
+import { isAbsolute as isAbsoluteHardwareNode } from 'node:path';
 const MAX_OUTPUT = 64 << 10;
 const TIMEOUT_MS = 20_000;
 const readOutput = (command, input) => new Promise((resolve, reject) => {
-    const child = spawn(command, [], { shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    if (/\.m?js$/.test(command) && !isAbsoluteHardwareNode(process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath)) return reject(new Error('ADVERSERIAL_NODE_EXECUTABLE must be an absolute executable path.'));
+    const child = spawn(/\.m?js$/.test(command) ? (process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath) : command, /\.m?js$/.test(command) ? [command] : [], { shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '';
     let stderr = '';
     let exceeded = false;

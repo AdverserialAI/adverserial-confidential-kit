@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 import subprocess
 from typing import Any, Mapping, Optional
 
@@ -20,7 +22,13 @@ def verifier_from_command(command: str):
     def verify(evidence: Mapping[str, Any], nonce: str, model: str, endpoint: Optional[str]) -> HardwareVerification:
         request = json.dumps({"evidence": evidence, "nonce": nonce, "model": model, "endpoint": endpoint}, separators=(",", ":")).encode()
         try:
-            completed = subprocess.run([command], input=request, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False)
+            invocation = [command]
+            if command.endswith(('.mjs', '.js')):
+                node = Path(os.environ.get('ADVERSERIAL_NODE_EXECUTABLE', ''))
+                if not node.is_absolute() or not node.is_file():
+                    raise RuntimeError('ADVERSERIAL_NODE_EXECUTABLE must name an absolute Node executable')
+                invocation = [str(node), command]
+            completed = subprocess.run(invocation, input=request, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise RuntimeError("hardware verifier could not run") from exc
         if len(completed.stdout) > _MAX_OUTPUT or completed.returncode != 0:

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 
 INSTALLER = Path(__file__).resolve().parents[2] / 'install-runtime.py'
 
@@ -15,14 +16,14 @@ class RuntimeInstallTests(unittest.TestCase):
         for fail_once in (False, True):
             with self.subTest(fail_once=fail_once), tempfile.TemporaryDirectory() as directory:
                 home = Path(directory)
-                binary = home / 'venv/bin'
-                binary.mkdir(parents=True)
-                (binary / 'python').touch()
-                pip = binary / 'pip'
+                venv.EnvBuilder(with_pip=False).create(home / 'venv')
+                binary = home / 'venv' / ('Scripts' if os.name == 'nt' else 'bin')
+                gateway = binary / ('adverserial-confidential-gateway.exe' if os.name == 'nt' else 'adverserial-confidential-gateway')
+                pip = home / 'pip.py'
                 pip.write_text(f'''#!{sys.executable}
 from pathlib import Path
 import sys, time
-home=Path(__file__).resolve().parents[2]
+home=Path(__file__).resolve().parent
 with open(home/'calls', 'a') as log: log.write('install\\n')
 lock=home/'pip-active'
 with open(lock, 'x'): pass
@@ -32,11 +33,11 @@ if {fail_once!r} and not (home/'failed-once').exists():
     (home/'failed-once').touch()
     raise SystemExit(1)
 if sys.argv[-1]=='gateway-package':
-    (home/'venv/bin/adverserial-confidential-gateway').touch()
+    Path({str(gateway)!r}).touch()
 ''')
                 pip.chmod(0o700)
                 command = [sys.executable, str(INSTALLER), str(home), 'sdk-package', 'gateway-package', 'test@1']
-                children = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(2)]
+                children = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={**os.environ, 'PYTHONPATH': str(home)}) for _ in range(2)]
                 statuses = []
                 for child in children:
                     output, error = child.communicate(timeout=15)
@@ -45,4 +46,5 @@ if sys.argv[-1]=='gateway-package':
                 self.assertEqual(len((home / 'calls').read_text().splitlines()), 3 if fail_once else 2)
                 self.assertEqual(json.loads((home / 'gateway.json').read_text())['revision'], 'test@1')
                 self.assertFalse((home / 'pip-active').exists())
-                self.assertEqual(os.stat(home / 'gateway.json').st_mode & 0o777, 0o600)
+                if os.name != 'nt':
+                    self.assertEqual(os.stat(home / 'gateway.json').st_mode & 0o777, 0o600)

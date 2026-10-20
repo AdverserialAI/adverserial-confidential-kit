@@ -472,7 +472,7 @@ def main() -> None:
         server = BoundedThreadingHTTPServer((config.listen_host, 0), Handler)
     port = server.server_address[1]
     if args.ready_fd is not None:
-        with os.fdopen(args.ready_fd, "w") as ready:
+        with os.fdopen(args.ready_fd, "w", closefd=False) as ready:
             ready.write(json.dumps({"port": port, "pid": os.getpid()}) + "\n")
             ready.flush()
     print(f"adverserial confidential gateway listening on http://{config.listen_host}:{port}", flush=True)

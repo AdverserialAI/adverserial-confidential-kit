@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/ACK-0.2.5-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
-[![Platform](https://img.shields.io/badge/key_vault-macOS_Keychain-555)](#requirements)
+[![Platform](https://img.shields.io/badge/key_vault-Keychain_%7C_Windows_DPAPI-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
 
 [Website](https://adverserial.ai) · [How confidentiality works](https://adverserial.ai/confidential/) · [Verify a runtime](https://verify.adverserial.ai) · [SDK](https://github.com/AdverserialAI/confidential-sdk) · [Security](mailto:security@adverserial.ai)
@@ -59,8 +59,8 @@ without waiting for that release.
 
 ### Requirements
 
-- **macOS** for encrypted key storage through Keychain. This release does not
-  implement Linux or Windows credential stores.
+- **macOS or Windows** for encrypted key storage through Keychain or Windows
+  DPAPI (bound to your Windows account). Linux credential storage is not yet implemented.
 - **Node.js 18+**, npm and **Python 3.10+** on PATH.
 - An Adverserial API key with access to a currently published confidential model.
 - The official CLI for each harness you want to use. ACK detects installed
@@ -71,6 +71,22 @@ without waiting for that release.
 ACK keeps its own runtime under `~/.config/adverserial/venv`; it does not replace
 your normal Python environment. Existing harness executables are reused. An upstream harness may show its own
 first-run theme or workspace-trust dialog; ACK does not bypass those choices.
+
+On Windows, run the same `ack init` and `ack code claude` / `ack code codex`
+commands from PowerShell or Windows Terminal. ACK recognizes native `.exe`
+launchers and npm `.cmd` shims, including per-user npm and `.local/bin` installs.
+It also finds the CLI bundled under `%LOCALAPPDATA%/OpenAI/Codex/bin` when no
+standalone Codex CLI is on PATH. `ack code codex` opens a CLI session; it does
+not change the provider of an already-open desktop chat. Use `ack harnesses`
+to see the selected executable, or `ACK_CODEX_BIN` / `ACK_CLAUDE_BIN` (and the
+corresponding override for other harnesses) to choose a specific installation.
+
+Windows settings default to `%USERPROFILE%/.config/adverserial` when `HOME`
+is unset; `ACK_HOME` still overrides this location. The `storage-key.dpapi`
+file contains only the Windows-protected storage key. Keep it with `ack.json`
+when backing up the vault; it is not portable to a different Windows account.
+Older Codex versions without `plugin add` use the bundled local attestation
+skill. Other harnesses still require an upstream CLI that supports your OS.
 
 ## The Confidential Console
 
@@ -195,7 +211,7 @@ ack keys delete personal
 ```
 
 Keys are encrypted with AES-256-GCM in `~/.config/adverserial/ack.json` using a
-random storage key held in macOS Keychain. Key entry is masked; listings show
+random storage key held in macOS Keychain or protected with Windows DPAPI. Key entry is masked; listings show
 only a short masked identifier. Secret values are excluded from console history,
 preferences and activity logs. ACK refuses to delete the active profile: select
 another one first. Existing plaintext ACK state is migrated into encrypted

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile, mkdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,7 @@ const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'lor
 async function fixture(t) {
   const home=await mkdtemp(join(tmpdir(),'ack-harness-config-'));
   t.after(()=>rm(home,{recursive:true,force:true}));
-  return {home, env:{HOME:home,ACK_HOME:home,PATH:'',ACK_CLAUDE_BIN:'/bin/echo',ACK_HERMES_BIN:'/bin/echo',ACK_KIMI_BIN:'/bin/echo',ACK_ZCODE_BIN:'/bin/echo',ACK_DSH_BIN:'/bin/echo',ADVERSERIAL_GATEWAY_PORT:'8765'}};
+  return {home, env:{HOME:home,ACK_HOME:home,PATH:'',ACK_CLAUDE_BIN:process.execPath,ACK_HERMES_BIN:process.execPath,ACK_KIMI_BIN:process.execPath,ACK_ZCODE_BIN:process.execPath,ACK_DSH_BIN:process.execPath,ADVERSERIAL_GATEWAY_PORT:'8765'}};
 }
 test('Claude headless keeps its plugin and private status-line settings',async t=>{
  const {env}=await fixture(t); const launch=await headlessCommand('claude',state(),env,'hello');
@@ -54,14 +55,16 @@ test('ZCode writes its current versioned provider schema with only a session-sco
  const other=await harnessCommand('zcode',state(),env);assert.notEqual(other.env.ADVERSERIAL_LOCAL_GATEWAY_TOKEN,first.env.ADVERSERIAL_LOCAL_GATEWAY_TOKEN);
 });
 test('Codex plugin installation honors the isolated CODEX_HOME',async t=>{
- const {home,env}=await fixture(t);const binary=join(home,'codex');const log=join(home,'calls');
- await writeFile(binary,'#!/bin/sh\nprintf "%s\\n" "$CODEX_HOME" >> "$ACK_TEST_CALLS"\n',{mode:0o700});
+ const {home,env}=await fixture(t);const binary=join(home,process.platform==='win32'?'codex.cmd':'codex');const log=join(home,'calls');
+ const script=join(home,'record.cjs');
+ await writeFile(script,"require('node:fs').appendFileSync(process.env.ACK_TEST_CALLS,process.env.CODEX_HOME+'\\n'); console.log('  add  Install plugin')");
+ await writeFile(binary,process.platform==='win32'?`@echo off\n"${process.execPath}" "${script}"\n`:`#!/bin/sh\nexec '${process.execPath}' '${script}'\n`,{mode:0o700});
  env.ACK_CODEX_BIN=binary;env.CODEX_HOME=join(home,'isolated-codex');env.ACK_TEST_CALLS=log;
  await harnessCommand('codex',state(),env);
- assert.deepEqual((await readFile(log,'utf8')).trim().split('\n'),[env.CODEX_HOME,env.CODEX_HOME]);
+ assert.deepEqual((await readFile(log,'utf8')).trim().split(/\r?\n/),[env.CODEX_HOME,env.CODEX_HOME,env.CODEX_HOME]);
 });
 test('Claude badge refuses expired, unpinned, synthetic and future-dated cached verdicts',async t=>{
- const {home}=await fixture(t);const cache=join(home,'verdict.json');const script=new URL('../resources/plugins/claude-code/bin/adverserial-statusline.mjs',import.meta.url).pathname;
+ const {home}=await fixture(t);const cache=join(home,'verdict.json');const script=fileURLToPath(new URL('../resources/plugins/claude-code/bin/adverserial-statusline.mjs',import.meta.url));
  const now=Date.now();const valid={status:'verified',trust:'pinned',verifiedAt:now,proof:{expiresEpoch:now/1000+60,devMode:false}};
  for(const [name,verdict,good] of [['fresh',valid,true],['expired',{...valid,proof:{expiresEpoch:now/1000-1}},false],['old',{...valid,verifiedAt:now-360000},false],['unpinned',{...valid,trust:'tofu'},false],['synthetic',{...valid,proof:{...valid.proof,devMode:true}},false],['future',{...valid,verifiedAt:now+60000},false]]){
  await writeFile(cache,JSON.stringify(verdict));const result=spawnSync(process.execPath,[script],{input:'{}',encoding:'utf8',env:{...process.env,ADVERSERIAL_CACHE_FILE:cache}});
@@ -73,9 +76,9 @@ test('a policy-bound verifier keeps public pins available when a harness scrubs 
  const pins={kid:{kty:'EC',crv:'P-256',x:'public-x',y:'public-y'}};
  await writeFile(join(home,'receipt-keys.json'),JSON.stringify(pins));
  for(const name of ['pi','zcode','deepseek-harness']) {
-  env.ACK_PI_BIN='/bin/echo';
+  env.ACK_PI_BIN=process.execPath;
   const launch=await harnessCommand(name,current,env);
-  assert.match(launch.env.ADVERSERIAL_VERIFY_COMMAND,/\/bin\/verify-[a-f0-9]+\.mjs$/);
+  assert.match(launch.env.ADVERSERIAL_VERIFY_COMMAND,/[\\/]bin[\\/]verify-[a-f0-9]+\.mjs$/);
   const script=await readFile(launch.env.ADVERSERIAL_VERIFY_COMMAND,'utf8');
   assert.ok(script.includes('ADVERSERIAL_RECEIPT_KEYS_JSON'));assert.ok(script.includes('public-x'));
   assert.ok(!script.includes(current.apiKey));assert.ok(script.includes('ADVERSERIAL_HARDWARE_VERIFIER_COMMAND'));
@@ -93,7 +96,7 @@ test('ZCode removes only its previous ACK-owned plaintext provider configuration
  assert.deepEqual(JSON.parse(await readFile(path,'utf8')),{ownedBy:'someone-else'});
 });
 test('Oh My Pi does not reuse a Pi agent-directory override from another harness',async t=>{
- const {home,env}=await fixture(t);env.ACK_OMP_BIN='/bin/echo';env.PI_CODING_AGENT_DIR=join(home,'pi');env.OMP_CODING_AGENT_DIR=join(home,'omp');
+ const {home,env}=await fixture(t);env.ACK_OMP_BIN=process.execPath;env.PI_CODING_AGENT_DIR=join(home,'pi');env.OMP_CODING_AGENT_DIR=join(home,'omp');
  const omp=await harnessCommand('oh-my-pi',state(),env);
  assert.equal(omp.env.PI_CODING_AGENT_DIR,env.OMP_CODING_AGENT_DIR);assert.notEqual(omp.env.PI_CODING_AGENT_DIR,env.PI_CODING_AGENT_DIR);
 });

@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@phala/dcap-qvl": "0.6.5",
+    "cross-spawn": "^7.0.6",
     "ehbp": "0.3.3"
   },
   "scripts": {

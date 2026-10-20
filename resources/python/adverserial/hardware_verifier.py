@@ -107,8 +107,10 @@ def _command(env_name: str) -> str:
 
 def _run_adapter(env_name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     try:
+        command = _command(env_name)
+        invocation = [sys.executable, command] if command.endswith('.py') else [command]
         completed = subprocess.run(
-            [_command(env_name)], input=json.dumps(payload, separators=(",", ":")).encode(),
+            invocation, input=json.dumps(payload, separators=(",", ":")).encode(),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
