@@ -443,8 +443,10 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ClientRequestError("Request must be a JSON object")
             streaming = payload.get("stream", False)
+            if streaming is None:
+                streaming = False
             if not isinstance(streaming, bool):
-                raise ClientRequestError("stream must be a boolean")
+                raise ClientRequestError("stream must be a boolean or null")
             if path == "/v1/messages":
                 model = payload.get("model")
                 if not isinstance(model, str):

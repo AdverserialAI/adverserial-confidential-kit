@@ -79,6 +79,10 @@ class GatewayStressTests(unittest.TestCase):
         self.assertEqual(self.dispatcher.calls, 240)
         self.assertEqual(self.dispatcher.closed, 120)
         self.assertEqual(self.request(paths[0], json.dumps(valid))[0], 200)
+        for path in paths:
+            status, body = self.request(path, json.dumps({**valid, "stream": None}))
+            self.assertEqual(status, 200)
+            self.assertIsInstance(json.loads(body), dict)
 
     def test_saturation_rejects_then_releases_all_slots(self):
         # Occupy all 16 slots with deterministic fixture work, then release it.

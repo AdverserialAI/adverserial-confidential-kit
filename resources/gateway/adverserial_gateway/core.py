@@ -207,8 +207,8 @@ class Dispatcher:
         return entitlement
 
     def completion(self, api_key: str, payload: Mapping[str, Any]):
-        if "stream" in payload and not isinstance(payload["stream"], bool):
-            raise ClientRequestError("stream must be a boolean")
+        if payload.get("stream") is not None and not isinstance(payload["stream"], bool):
+            raise ClientRequestError("stream must be a boolean or null")
         model = payload.get("model")
         if not isinstance(model, str):
             raise ClientRequestError("model is required")

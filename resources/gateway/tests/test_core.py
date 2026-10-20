@@ -64,11 +64,18 @@ class CoreTests(unittest.TestCase):
             release.assert_called_once_with("sk-" + "x" * 24, "signed-entitlement")
 
     def test_invalid_stream_flags_fail_before_billing(self):
-        for value in ("false", 1, [], {}, None):
+        for value in ("false", 1, [], {}):
             with self.subTest(value=value), patch.object(self.dispatcher, "proof_for") as proof:
                 with self.assertRaises(ClientRequestError):
                     self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": value})
                 proof.assert_not_called()
+
+    def test_null_stream_is_normalized_to_false(self):
+        with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
+            self.dispatcher, "entitlement", return_value="signed-entitlement"
+        ), patch("adverserial_gateway.core.VerifiedSession") as session:
+            self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": None})
+            self.assertIs(session.return_value.chat_completions.call_args.kwargs["stream"], False)
 
     def test_unknown_models_cannot_reach_the_entitlement_exchange(self):
         with self.assertRaises(ClientRequestError):
