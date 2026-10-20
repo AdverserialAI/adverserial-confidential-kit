@@ -301,8 +301,11 @@ def responses_to_chat(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not messages:
         raise ClientRequestError("at least one input message is required")
     out: dict[str, Any] = {"messages": messages}
-    if payload.get("max_output_tokens"):
-        out["max_tokens"] = payload["max_output_tokens"]
+    limit = payload.get("max_output_tokens")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ClientRequestError("max_output_tokens must be a positive integer")
+        out["max_tokens"] = limit
     for name in ("temperature", "top_p", "parallel_tool_calls"):
         if name in payload:
             out[name] = payload[name]

@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import errno
 from dataclasses import replace
+from contextlib import suppress
+from functools import wraps
 import hmac
 import os
 import ipaddress
@@ -26,6 +28,25 @@ MAX_LOCAL_REQUEST_BYTES = 8 * 1024 * 1024
 MAX_LOCAL_CONNECTIONS = 16
 LOCAL_CONNECTION_TIMEOUT_SECONDS = 20.0
 LOCAL_BODY_DEADLINE_SECONDS = 30.0
+
+
+def managed_stream(method):
+    """Own upstream resources even when the client leaves before headers."""
+    @wraps(method)
+    def wrapped(self, stream, *args):
+        try:
+            return method(self, stream, *args)
+        except OSError:
+            # A disconnected client cannot receive a second error response.
+            self.close_connection = True
+        finally:
+            with suppress(OSError):
+                stream.close()
+    return wrapped
+
+
+def reject_json_constant(value):
+    raise ClientRequestError(f"Invalid JSON number: {value}")
 
 
 class RequestBodyTimeout(ClientRequestError):
@@ -210,6 +231,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b"data: " + json.dumps(payload, separators=(",", ":")).encode() + b"\n\n")
         self.wfile.flush()
 
+    @managed_stream
     def _stream_openai(self, stream):
         self._sse_start()
         try:
@@ -221,13 +243,13 @@ class Handler(BaseHTTPRequestHandler):
         except (GatewayError, VerificationError, ValueError, OSError) as exc:
             self._sse({"error": {"type": "confidential_gateway_error", "message": str(exc)}}, "error")
 
+    @managed_stream
     def _stream_anthropic(self, stream, model: str):
         self._sse_start(); message_id = "msg_" + uuid.uuid4().hex
         self._sse({"type":"message_start","message":{"id":message_id,"type":"message","role":"assistant","model":model,"content":[],"stop_reason":None,"stop_sequence":None,"usage":{"input_tokens":0,"output_tokens":0}}}, "message_start")
-        # Preserve each OpenAI stream tool-call index. Anthropic requires
-        # content blocks to close in order, so each upstream tool-call block
-        # is closed before the next begins while its argument fragments remain
-        # associated with its original OpenAI index.
+        # OpenAI parallel tool arguments can interleave. Buffer tools by their
+        # original index, then emit sequential Anthropic blocks after receipt
+        # verification. Text and thinking continue streaming immediately.
         next_index = 0; open_block = None; blocks = {}; saw_tool = False
         def close_block(block):
             nonlocal open_block
@@ -257,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
             return block
 
         def tool_block(call):
-            nonlocal next_index, open_block, saw_tool
+            nonlocal saw_tool
             raw_index = call.get("index")
             key = raw_index if isinstance(raw_index, int) else call.get("id")
             if key is None:
@@ -269,25 +291,16 @@ class Handler(BaseHTTPRequestHandler):
             if block is None:
                 if not name:
                     raise ClientRequestError("upstream streamed a tool argument before its function name")
-                if open_block is not None:
-                    close_block(open_block)
-                block = {"kind": "tool_use", "index": next_index, "closed": False, "id": call_id or "toolu_" + uuid.uuid4().hex, "name": name}
-                next_index += 1
+                block = {"kind": "tool_use", "closed": False, "id": call_id or "toolu_" + uuid.uuid4().hex, "name": name, "arguments": []}
                 blocks[key] = block
-                self._sse({"type":"content_block_start","index":block["index"],"content_block":{"type":"tool_use","id": "toolu_" + block["id"].removeprefix("toolu_"), "name":name,"input":{}}}, "content_block_start")
-                open_block = block
                 saw_tool = True
-            elif block is not open_block:
-                if block.get("closed"):
-                    raise ClientRequestError("upstream interleaved tool arguments after an earlier tool block closed")
-                if open_block is not None:
-                    close_block(open_block)
-                open_block = block
             return block
         try:
             usage = {}
+            finish_reason = None
             for chunk in stream:
                 choice = (chunk.get("choices") or [{}])[0]
+                finish_reason = choice.get("finish_reason") or finish_reason
                 delta = choice.get("delta") or {}
                 thinking = delta.get("reasoning_content")
                 text = delta.get("content")
@@ -301,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
                     fn = call.get("function") or {}
                     args = fn.get("arguments") if isinstance(fn, dict) and isinstance(fn.get("arguments"), str) else ""
                     if args:
-                        self._sse({"type":"content_block_delta","index":block["index"],"delta":{"type":"input_json_delta","partial_json":args}}, "content_block_delta")
+                        block["arguments"].append(args)
                 if text:
                     block = start_plain("text")
                     self._sse({"type":"content_block_delta","index":block["index"],"delta":{"type":"text_delta","text":text}}, "content_block_delta")
@@ -310,12 +323,18 @@ class Handler(BaseHTTPRequestHandler):
                 raise ClientRequestError("confidential stream ended without a verified receipt")
             close_block(open_block)
             for block in blocks.values():
+                block["index"] = next_index
+                next_index += 1
+                self._sse({"type":"content_block_start","index":block["index"],"content_block":{"type":"tool_use","id":"toolu_" + block["id"].removeprefix("toolu_"),"name":block["name"],"input":{}}}, "content_block_start")
+                self._sse({"type":"content_block_delta","index":block["index"],"delta":{"type":"input_json_delta","partial_json":"".join(block["arguments"])}}, "content_block_delta")
                 close_block(block)
-            self._sse({"type":"message_delta","delta":{"stop_reason":"tool_use" if saw_tool else "end_turn","stop_sequence":None},"usage":{"output_tokens":usage.get("completion_tokens",0)}}, "message_delta")
+            stop_reason = "max_tokens" if finish_reason == "length" else ("tool_use" if saw_tool else "end_turn")
+            self._sse({"type":"message_delta","delta":{"stop_reason":stop_reason,"stop_sequence":None},"usage":{"output_tokens":usage.get("completion_tokens",0)}}, "message_delta")
             self._sse({"type":"message_stop"}, "message_stop")
         except (GatewayError, VerificationError, ValueError, OSError) as exc:
             self._sse({"type":"error","error":{"type":"api_error","message":str(exc)}}, "error")
 
+    @managed_stream
     def _stream_responses(self, stream, model: str):
         self._sse_start(); rid = "resp_" + uuid.uuid4().hex
         self._sse({"type":"response.created","response":{"id":rid,"object":"response","status":"in_progress","model":model,"output":[]}}, "response.created")
@@ -352,8 +371,10 @@ class Handler(BaseHTTPRequestHandler):
             return state
         try:
             usage = {}
+            finish_reason = None
             for chunk in stream:
                 choice = (chunk.get("choices") or [{}])[0]
+                finish_reason = choice.get("finish_reason") or finish_reason
                 delta = choice.get("delta") or {}
                 text = delta.get("content")
                 if text:
@@ -371,19 +392,24 @@ class Handler(BaseHTTPRequestHandler):
                 usage = chunk.get("usage") or usage
             if not stream.receipt_verified:
                 raise ClientRequestError("confidential stream ended without a verified receipt")
+            status = "incomplete" if finish_reason == "length" else "completed"
             if text_state is not None:
-                item={"id":text_state["id"],"type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":text_state["text"],"annotations":[]}]}
+                item={"id":text_state["id"],"type":"message","status":status,"role":"assistant","content":[{"type":"output_text","text":text_state["text"],"annotations":[]}]}
                 self._sse({"type":"response.output_text.done","item_id":text_state["id"],"output_index":text_state["index"],"content_index":0,"text":text_state["text"]}, "response.output_text.done")
                 self._sse({"type":"response.content_part.done","item_id":text_state["id"],"output_index":text_state["index"],"content_index":0,"part":item["content"][0]}, "response.content_part.done")
                 self._sse({"type":"response.output_item.done","output_index":text_state["index"],"item":item}, "response.output_item.done")
                 completed.append((text_state["index"], item))
             for state in tools.values():
-                item={"id":state["id"],"type":"function_call","status":"completed","call_id":state["call_id"],"name":state["name"],"arguments":state["arguments"]}
+                item={"id":state["id"],"type":"function_call","status":status,"call_id":state["call_id"],"name":state["name"],"arguments":state["arguments"]}
                 self._sse({"type":"response.function_call_arguments.done","item_id":state["id"],"output_index":state["index"],"name":state["name"],"arguments":state["arguments"]}, "response.function_call_arguments.done")
                 self._sse({"type":"response.output_item.done","output_index":state["index"],"item":item}, "response.output_item.done")
                 completed.append((state["index"], item))
             output=[item for _index, item in sorted(completed)]
-            self._sse({"type":"response.completed","response":{"id":rid,"object":"response","status":"completed","model":model,"output":output,"usage":{"input_tokens":usage.get("prompt_tokens",0),"output_tokens":usage.get("completion_tokens",0),"total_tokens":usage.get("total_tokens",0)}}}, "response.completed")
+            response = {"id":rid,"object":"response","status":status,"model":model,"output":output,"usage":{"input_tokens":usage.get("prompt_tokens",0),"output_tokens":usage.get("completion_tokens",0),"total_tokens":usage.get("total_tokens",0)}}
+            if status == "incomplete":
+                response["incomplete_details"] = {"reason":"max_output_tokens"}
+            event = "response." + status
+            self._sse({"type":event,"response":response}, event)
         except (GatewayError, VerificationError, ValueError, OSError) as exc:
             self._sse({"type":"response.failed","response":{"id":rid,"object":"response","status":"failed","error":{"code":"confidential_gateway_error","message":str(exc)}}}, "response.failed")
 
@@ -413,10 +439,14 @@ class Handler(BaseHTTPRequestHandler):
             local_token = os.environ.get("ADVERSERIAL_LOCAL_GATEWAY_TOKEN", "")
             if local_token and hmac.compare_digest(api_key, local_token):
                 api_key = os.environ.get("ADVERSERIAL_UPSTREAM_API_KEY", "")
-            payload = json.loads(self._read_body(size))
+            payload = json.loads(self._read_body(size), parse_constant=reject_json_constant)
             if not isinstance(payload, dict):
                 raise ClientRequestError("Request must be a JSON object")
-            streaming = bool(payload.get("stream"))
+            streaming = payload.get("stream", False)
+            if streaming is None:
+                streaming = False
+            if not isinstance(streaming, bool):
+                raise ClientRequestError("stream must be a boolean or null")
             if path == "/v1/messages":
                 model = payload.get("model")
                 if not isinstance(model, str):

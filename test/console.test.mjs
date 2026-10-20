@@ -5,6 +5,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { AckConsole, clean, filterItems, tokenize, verificationLabel, visibleLength } from '../lib/console.mjs';
+
+test('Windows console preserves drive paths, UNC shares and trailing separators', () => {
+  const options = { platform: 'win32' };
+  assert.deepEqual(tokenize('swarm "inspect C:\\Users\\Adam\\my project\\"', options), ['swarm', 'inspect C:\\Users\\Adam\\my project\\']);
+  assert.deepEqual(tokenize('swarm \\\\server\\share\\file.py', options), ['swarm', '\\\\server\\share\\file.py']);
+  assert.deepEqual(tokenize('swarm C:\\Users\\Adam\\file.py', options), ['swarm', 'C:\\Users\\Adam\\file.py']);
+  assert.deepEqual(tokenize('swarm review\\ file', { platform: 'linux' }), ['swarm', 'review file']);
+});
 import { consoleBackend, consoleSnapshot } from '../lib/ack.mjs';
 
 function fakeTerminal(columns = 100, rows = 36) {

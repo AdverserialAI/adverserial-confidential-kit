@@ -17,6 +17,24 @@ async function fixture(t){
  return {home,env:{...process.env,ACK_HOME:home,ADVERSERIAL_GATEWAY_PORT:''}};
 }
 async function stop(child){const closed=once(child,'close');child.kill('SIGTERM');await closed;}
+
+test('24 gateway starts across concurrent bursts preserve isolation and release ports', async t => {
+ const {env}=await fixture(t);
+ const sessions=[];
+ t.after(async()=>{for(const session of sessions)if(session.child.exitCode===null&&session.child.signalCode===null)await stop(session.child)});
+ for(let round=0;round<3;round++){
+  const results=await Promise.allSettled(Array.from({length:8},()=>startSessionGateway(state(),env)));
+  const started=results.filter(result=>result.status==='fulfilled').map(result=>result.value);
+  sessions.push(...started);
+  assert.equal(started.length,8,JSON.stringify(results.filter(result=>result.status==='rejected').map(result=>String(result.reason))));
+  assert.equal(new Set(started.map(session=>session.env.ADVERSERIAL_GATEWAY_PORT)).size,8);
+  assert.equal(new Set(started.map(session=>session.env.ACK_SESSION_HOME)).size,8);
+  const urls=started.map(session=>`http://127.0.0.1:${session.env.ADVERSERIAL_GATEWAY_PORT}/healthz`);
+  await Promise.all(urls.map(async url=>assert.equal(await(await fetch(url)).text(),'owned')));
+  await Promise.all(started.map(session=>stop(session.child)));
+  await Promise.all(urls.map(url=>assert.rejects(fetch(url,{signal:AbortSignal.timeout(2000)}))));
+ }
+});
 test('two simultaneous sessions own separate bound gateways and stopping one leaves the other running',async t=>{
  const {env}=await fixture(t);const [a,b]=await Promise.all([startSessionGateway(state(),env),startSessionGateway(state(),env)]);
  t.after(async()=>{for(const session of [a,b])if(session.child.exitCode===null&&session.child.signalCode===null)await stop(session.child)});

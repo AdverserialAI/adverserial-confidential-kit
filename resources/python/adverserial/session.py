@@ -31,7 +31,7 @@ import http.client
 import json
 import secrets
 import time
-from typing import Any, Dict, Generator, Iterable, Iterator, Mapping, Optional
+from typing import Any, Callable, Dict, Generator, Iterable, Iterator, Mapping, Optional
 from urllib.parse import urlsplit
 
 from cryptography.exceptions import InvalidSignature
@@ -120,8 +120,9 @@ class ReceiptStream:
     exchange failed verification".
     """
 
-    def __init__(self) -> None:
+    def __init__(self, close_transport: Optional[Callable[[], None]] = None) -> None:
         self._generator: Optional[Generator[Any, None, None]] = None
+        self._close_callback = close_transport
         self.receipt_verified = False
         self.receipt_claims: Optional[Dict[str, Any]] = None
 
@@ -133,8 +134,17 @@ class ReceiptStream:
         return next(self._generator)
 
     def close(self) -> None:
-        if self._generator is not None:
-            self._generator.close()
+        try:
+            if self._generator is not None:
+                self._generator.close()
+        finally:
+            # Closing an unstarted generator does not execute its finally.
+            self._close_transport()
+
+    def _close_transport(self) -> None:
+        callback, self._close_callback = self._close_callback, None
+        if callback is not None:
+            callback()
 
 
 class VerifiedSession:
@@ -413,23 +423,24 @@ class VerifiedSession:
         headers = self._headers({"Content-Type": "application/json", "Accept": "text/event-stream", "X-Adverserial-Nonce": nonce})
         headers[ENCAPSULATED_KEY_HEADER] = encrypted.encapsulated_key.hex()
         self.dispatched = True
-        connection.request("POST", self._base_path + "/chat/completions", body=encrypted.body, headers=headers)
-        response = connection.getresponse()
-        if response.status != 200:
-            data = response.read()
-            connection.close()
-            raise UpstreamHTTPError(response.status, self._error_detail(encrypted, response, data))
-        nonce_header = response.getheader(RESPONSE_NONCE_HEADER)
-        if not nonce_header:
-            connection.close()
-            raise VerificationError("the confidential endpoint returned a successful plaintext response")
         try:
-            decryptor = encrypted.token.create_response_decryptor(bytes.fromhex(nonce_header))
-        except (TypeError, ValueError) as exc:
+            connection.request("POST", self._base_path + "/chat/completions", body=encrypted.body, headers=headers)
+            response = connection.getresponse()
+            if response.status != 200:
+                data = response.read()
+                raise UpstreamHTTPError(response.status, self._error_detail(encrypted, response, data))
+            nonce_header = response.getheader(RESPONSE_NONCE_HEADER)
+            if not nonce_header:
+                raise VerificationError("the confidential endpoint returned a successful plaintext response")
+            try:
+                decryptor = encrypted.token.create_response_decryptor(bytes.fromhex(nonce_header))
+            except (TypeError, ValueError) as exc:
+                raise VerificationError("the confidential endpoint supplied an invalid EHBP response nonce") from exc
+        except Exception:
             connection.close()
-            raise VerificationError("the confidential endpoint supplied an invalid EHBP response nonce") from exc
+            raise
 
-        stream = ReceiptStream()
+        stream = ReceiptStream(connection.close)
 
         def events() -> Generator[Any, None, None]:
             hasher = hashlib.sha256()
@@ -467,7 +478,7 @@ class VerifiedSession:
                             yield parsed
                 decryptor.finish()
             finally:
-                connection.close()
+                stream._close_transport()
             if receipt_token is not None:
                 claims = self._verify_request_receipt(
                     token=receipt_token,
@@ -492,16 +503,19 @@ class VerifiedSession:
         if nonce:
             headers["X-Adverserial-Nonce"] = nonce
         self.dispatched = True
-        connection.request(
-            "POST", self._base_path + "/chat/completions", body=body, headers=headers
-        )
-        response = connection.getresponse()
-        if response.status != 200:
-            data = response.read()
+        try:
+            connection.request(
+                "POST", self._base_path + "/chat/completions", body=body, headers=headers
+            )
+            response = connection.getresponse()
+            if response.status != 200:
+                data = response.read()
+                raise UpstreamHTTPError(response.status, data[:200].decode("utf-8", "replace"))
+        except Exception:
             connection.close()
-            raise UpstreamHTTPError(response.status, data[:200].decode("utf-8", "replace"))
+            raise
 
-        stream = ReceiptStream()
+        stream = ReceiptStream(connection.close)
 
         def events() -> Generator[Any, None, None]:
             hasher = hashlib.sha256()
@@ -541,7 +555,7 @@ class VerifiedSession:
                         hasher.update(payload)
                         yield parsed
             finally:
-                connection.close()
+                stream._close_transport()
             if receipt_token is not None:
                 claims = self._verify_request_receipt(
                     token=receipt_token,

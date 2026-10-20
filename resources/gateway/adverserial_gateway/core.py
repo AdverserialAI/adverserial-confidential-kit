@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 import time
+import threading
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
@@ -126,6 +127,7 @@ def requested_output_tokens(payload: Mapping[str, Any]) -> int:
 @dataclass
 class ProofCache:
     proof: VerifiedProof | None = None
+    lock: Any = field(default_factory=threading.Lock, repr=False)
 
     def fresh_for(self, model: str) -> bool:
         return self.proof is not None and self.proof.model_id == model and self.proof.expires_epoch > int(time.time()) + 15
@@ -140,6 +142,12 @@ class Dispatcher:
     def proof_for(self, model: str) -> VerifiedProof:
         model = canonical_model_id(model)
         cached = self._proofs[model]
+        # Serialize refreshes per model, including expiry refreshes. Different
+        # models can still verify concurrently, and failures never enter cache.
+        with cached.lock:
+            return self._refresh_proof(model, cached)
+
+    def _refresh_proof(self, model: str, cached: ProofCache) -> VerifiedProof:
         if cached.fresh_for(model):
             return cached.proof  # type: ignore[return-value]
         try:
@@ -199,6 +207,8 @@ class Dispatcher:
         return entitlement
 
     def completion(self, api_key: str, payload: Mapping[str, Any]):
+        if payload.get("stream") is not None and not isinstance(payload["stream"], bool):
+            raise ClientRequestError("stream must be a boolean or null")
         model = payload.get("model")
         if not isinstance(model, str):
             raise ClientRequestError("model is required")
@@ -210,7 +220,7 @@ class Dispatcher:
         # The SDK re-serializes the payload before sending (adding "stream" and
         # its own separators), so reserve with headroom; the proxy bounds the
         # actual received body and settlement charges actual usage only.
-        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
         max_input = 2 * len(serialized) + 4096
         if not 1 <= max_input <= self.config.max_input_tokens:
             raise ClientRequestError(f"Request exceeds the confidential input policy: {max_input} bytes reserved (limit {self.config.max_input_tokens}).")
@@ -233,8 +243,9 @@ class Dispatcher:
         # entitlement-bound value below.
         outbound.pop("max_completion_tokens", None)
         outbound["max_tokens"] = max_output
-        session = VerifiedSession(self.config.cc_api_url, proof=proof, entitlement=entitlement, timeout=600)
+        session = None
         try:
+            session = VerifiedSession(self.config.cc_api_url, proof=proof, entitlement=entitlement, timeout=600)
             return session.chat_completions(outbound.pop("messages", []), model=model, stream=stream, **outbound)
         except Exception as exc:
             # Release the billing reservation only when the request provably
@@ -247,7 +258,7 @@ class Dispatcher:
             # Everything else — 5xx, timeout, stream break, receipt failure —
             # is outcome-unknown: the proxy's terminal meter settles the
             # reservation, and the caller must not blindly retry.
-            if not session.dispatched:
+            if session is None or not session.dispatched:
                 self.release_reservation(api_key, entitlement)
                 raise
             if isinstance(exc, UpstreamHTTPError):
