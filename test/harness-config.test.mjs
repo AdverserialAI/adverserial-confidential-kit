@@ -63,6 +63,23 @@ test('Codex plugin installation honors the isolated CODEX_HOME',async t=>{
  await harnessCommand('codex',state(),env);
  assert.deepEqual((await readFile(log,'utf8')).trim().split(/\r?\n/),[env.CODEX_HOME,env.CODEX_HOME,env.CODEX_HOME]);
 });
+
+for (const failedStage of ['marketplace', 'add']) {
+ test(`Codex still launches with its local verifier when plugin ${failedStage} fails`, async t => {
+  const {home,env}=await fixture(t);
+  const binary=join(home,process.platform==='win32'?'codex.cmd':'codex');
+  const script=join(home,'plugin.cjs');
+  await writeFile(script, `const args=process.argv.slice(2); if(args.includes('--help')) console.log('  add  Install plugin'); else if(args[1]===${JSON.stringify(failedStage)}) { console.error('fatal: fetch-pack: invalid index-pack output'); process.exit(1); }`);
+  await writeFile(binary,process.platform==='win32'?`@echo off\r\n"${process.execPath}" "${script}" %*\r\n`:`#!/bin/sh\nexec '${process.execPath}' '${script}' "$@"\n`,{mode:0o700});
+  env.ACK_CODEX_BIN=binary;env.CODEX_HOME=join(home,'isolated-codex');
+  const launch=await headlessCommand('codex',state(),env,'hello');
+  assert.ok(launch.args.includes('exec'));
+  assert.ok(launch.args.includes('model_provider="adverserial_confidential"'));
+  assert.match(launch.env.ADVERSERIAL_VERIFY_COMMAND,/adverserial-verify/);
+  assert.match(await readFile(join(env.CODEX_HOME,'skills/adverserial-attestation/SKILL.md'),'utf8'),/attestation/i);
+  assert.match(await readFile(join(env.CODEX_HOME,'prompts/adverserial-attestation.md'),'utf8'),/attestation/i);
+ });
+}
 test('Claude badge refuses expired, unpinned, synthetic and future-dated cached verdicts',async t=>{
  const {home}=await fixture(t);const cache=join(home,'verdict.json');const script=fileURLToPath(new URL('../resources/plugins/claude-code/bin/adverserial-statusline.mjs',import.meta.url));
  const now=Date.now();const valid={status:'verified',trust:'pinned',verifiedAt:now,proof:{expiresEpoch:now/1000+60,devMode:false}};

@@ -43,7 +43,7 @@ test('command parsing preserves quoted swarm tasks and rejects incomplete quotes
 
 test('verification badge expires and never treats unpinned or synthetic evidence as verified', () => {
   const now = Date.now();
-  const verdict = { status: 'verified', trust: 'pinned', verifiedAt: now, proof: { expiresEpoch: now / 1000 + 60 } };
+  const verdict = { status: 'verified', trust: 'pinned', verifiedAt: now, proof: { devMode: false, expiresEpoch: now / 1000 + 60 } };
   assert.equal(verificationLabel(verdict, now).tone, 'good');
   assert.equal(verificationLabel(verdict, now + 61_000).tone, 'warn');
   assert.equal(verificationLabel({ ...verdict, trust: 'tofu' }, now).tone, 'bad');

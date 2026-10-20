@@ -97,6 +97,57 @@ class GatewayAdmissionTests(unittest.TestCase):
         self.assertTrue(response.startswith(b"HTTP/1.1 408"), response)
         self.assertIn(b"Connection: close", response)
 
+    def test_trickling_body_cannot_reset_the_total_deadline(self):
+        connection = self._connect()
+        self.addCleanup(connection.close)
+        connection.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n")
+        stopped = threading.Event()
+        def trickle():
+            for _ in range(20):
+                if stopped.wait(0.04):
+                    return
+                try:
+                    connection.sendall(b" ")
+                except OSError:
+                    return
+        writer = threading.Thread(target=trickle, daemon=True)
+        writer.start()
+        started = time.monotonic()
+        try:
+            response = self._read_response(connection)
+            self.assertLess(time.monotonic() - started, 0.65)
+            self.assertTrue(response.startswith(b"HTTP/1.1 408"), response)
+        finally:
+            stopped.set()
+            writer.join(timeout=1)
+
+    def test_trickling_headers_cannot_hold_the_only_connection_slot(self):
+        self.server.connection_timeout = 0.2
+        connection = self._connect()
+        self.addCleanup(connection.close)
+        connection.sendall(b"GET /healthz HTTP/1.1\r\nX-Slow: ")
+        stopped = threading.Event()
+        def trickle():
+            for _ in range(20):
+                if stopped.wait(0.04):
+                    return
+                try:
+                    connection.sendall(b"x")
+                except OSError:
+                    return
+        writer = threading.Thread(target=trickle, daemon=True)
+        writer.start()
+        started = time.monotonic()
+        try:
+            try:
+                self._read_response(connection)
+            except (ConnectionResetError, ConnectionAbortedError):
+                pass  # Total header expiry closes incomplete requests.
+            self.assertLess(time.monotonic() - started, 0.65)
+        finally:
+            stopped.set()
+            writer.join(timeout=1)
+
     def test_rejected_chunked_body_closes_before_pipelined_bytes_are_reused(self):
         connection = self._connect()
         self.addCleanup(connection.close)

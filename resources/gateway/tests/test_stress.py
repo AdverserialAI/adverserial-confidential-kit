@@ -109,3 +109,12 @@ class GatewayStressTests(unittest.TestCase):
             self.assertEqual(self.request("/v1/chat/completions", payload)[0], 200)
         finally:
             self.dispatcher.gate.set()
+
+    def test_request_content_never_enters_gateway_logs(self):
+        logs = []
+        self.server.logger = logs.append
+        secret = "private-fixture-credential"
+        self.assertEqual(self.request("/" + secret, b"{}")[0], 404)
+        payload = {"model": "cyberglm", "input": "hello", "tools": [{"type": secret}]}
+        self.assertEqual(self.request("/v1/responses", json.dumps(payload))[0], 400)
+        self.assertNotIn(secret, "\n".join(logs))

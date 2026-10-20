@@ -153,6 +153,30 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "AdverserialConfidentialGateway/0.1"
     protocol_version = "HTTP/1.1"
 
+    def handle_one_request(self):
+        # An idle socket timeout resets after each byte. A separate deadline
+        # bounds the entire request line + headers, including slow trickles.
+        def expire_headers():
+            self.close_connection = True
+            with suppress(OSError):
+                self.connection.shutdown(socket.SHUT_RDWR)
+        timer = threading.Timer(self.server.connection_timeout, expire_headers)
+        timer.daemon = True
+        self._header_timer = timer
+        timer.start()
+        try:
+            super().handle_one_request()
+        except OSError:
+            self.close_connection = True
+        finally:
+            timer.cancel()
+
+    def parse_request(self):
+        try:
+            return super().parse_request()
+        finally:
+            self._header_timer.cancel()
+
     def log_message(self, *_args):
         # Do not log request paths, headers, bodies, identities, or prompts.
         return
@@ -203,7 +227,10 @@ class Handler(BaseHTTPRequestHandler):
                 # byte before each idle timeout forever.  Bound total upload
                 # time as well as each blocking read.
                 self.connection.settimeout(min(self.server.connection_timeout, timeout))
-                chunk = self.rfile.read(min(64 * 1024, remaining))
+                # read(n) can loop internally while each arriving byte resets
+                # the socket timeout. read1 returns after one underlying read
+                # so the total deadline is checked between network arrivals.
+                chunk = self.rfile.read1(min(64 * 1024, remaining))
             except (socket.timeout, TimeoutError, OSError) as exc:
                 raise RequestBodyTimeout("Request body upload timed out") from exc
             if not chunk:
@@ -423,8 +450,9 @@ class Handler(BaseHTTPRequestHandler):
         # Shape-only request log: method, path, and outcome — never content,
         # headers, or keys. This is the local debugging trail.
         log = getattr(self.server, "logger", None) or (lambda *a: print(*a, flush=True))
-        log(f"[gateway] POST {path}")
-        if path not in {"/v1/chat/completions", "/v1/messages", "/v1/responses", "/responses"}:
+        supported = path in {"/v1/chat/completions", "/v1/messages", "/v1/responses", "/responses"}
+        log(f"[gateway] POST {path if supported else '[unsupported endpoint]'}")
+        if not supported:
             return self._json(
                 HTTPStatus.NOT_FOUND,
                 {"error": {"message": "Unsupported local gateway endpoint"}},
@@ -437,8 +465,14 @@ class Handler(BaseHTTPRequestHandler):
             auth = self.headers.get("authorization", "")
             api_key = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else self.headers.get("x-api-key", "").strip()
             local_token = os.environ.get("ADVERSERIAL_LOCAL_GATEWAY_TOKEN", "")
-            if local_token and hmac.compare_digest(api_key, local_token):
-                api_key = os.environ.get("ADVERSERIAL_UPSTREAM_API_KEY", "")
+            if local_token:
+                upstream_key = os.environ.get("ADVERSERIAL_UPSTREAM_API_KEY", "")
+                matches_token = hmac.compare_digest(api_key.encode(), local_token.encode())
+                matches_key = bool(upstream_key) and hmac.compare_digest(api_key.encode(), upstream_key.encode())
+                if not matches_token and not matches_key:
+                    raise AuthorizationError("Invalid credentials for this local gateway session")
+                if matches_token:
+                    api_key = upstream_key
             payload = json.loads(self._read_body(size), parse_constant=reject_json_constant)
             if not isinstance(payload, dict):
                 raise ClientRequestError("Request must be a JSON object")
@@ -468,10 +502,10 @@ class Handler(BaseHTTPRequestHandler):
                 if streaming: return self._stream_openai(result)
                 self._json(HTTPStatus.OK, dict(result))
         except GatewayError as exc:
-            log(f"[gateway] POST {path} -> {exc.status_code} {exc}")
+            log(f"[gateway] POST {path} -> {exc.status_code} {type(exc).__name__}")
             self._json(exc.status_code, {"error": {"type": "confidential_gateway_error", "message": str(exc)}}, close=True)
         except (ValueError, TypeError, RecursionError) as exc:
-            log(f"[gateway] POST {path} -> 400 {exc}")
+            log(f"[gateway] POST {path} -> 400 {type(exc).__name__}")
             self._json(HTTPStatus.BAD_REQUEST, {"error": {"message": str(exc)}}, close=True)
 
 

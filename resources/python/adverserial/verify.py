@@ -201,9 +201,10 @@ def verify_endpoint(
     """
     url = attestation_url or _attestation_url_for(base_url)
     nonce = b64url_encode(secrets.token_bytes(32))
-    now_seconds = (now or time.time)()
+    clock = now or time.time
 
     payload, peer_der = fetch_attestation(url, nonce, timeout)
+    now_seconds = clock()
     evidence = payload.get("evidence")
     receipt = payload.get("verification_receipt")
     if not isinstance(evidence, dict) or not isinstance(receipt, str) or not receipt:
@@ -365,6 +366,8 @@ def verify_endpoint(
         raise VerificationError("the independent hardware verifier failed") from exc
     if not isinstance(hardware, HardwareVerification) or not hardware.verified or not hardware.verifier:
         raise VerificationError("the independent hardware verifier did not accept the evidence")
+    if exp <= clock():
+        raise VerificationError("the verification receipt expired during hardware verification")
 
     receipt_digest = canonical_evidence_digest(receipt)
     workload = evidence.get("workload") if isinstance(evidence.get("workload"), dict) else {}
