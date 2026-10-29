@@ -13,8 +13,10 @@
  * terminator cannot read them. The
  * Python SDK additionally pins the live TLS SPKI before it sends any bytes.
  */
+import type { RuntimePolicy } from './runtime-policy.js';
 import type { HardwareEvidenceVerifier, TrustedReceiptKeys, VerifiedProof } from './verify.js';
 export type VerifiedOpenAIOptions = {
+    expectedPolicy?: RuntimePolicy;
     /** Endpoint base URL, e.g. "https://host/v1". */
     baseURL: string;
     /** Short-lived, model-bound billing entitlement sent to the CVM. Never pass a platform API key here. */

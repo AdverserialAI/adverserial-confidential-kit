@@ -11,9 +11,9 @@
  * collateral) and the NVIDIA NRAS detached-EAT bundle verifier (NVIDIA's
  * public JWKS). ADVERSERIAL_MIN_GPU_COUNT overrides the default minimum of 8.
  */
-let createPhalaNVIDIAVerifier;
+let createPhalaNVIDIAVerifier, validateRuntimePolicy;
 try {
-  ({ createPhalaNVIDIAVerifier } = await import('./dist/phala.js'));
+  ({ createPhalaNVIDIAVerifier, validateRuntimePolicy } = await import('./dist/index.js'));
 } catch {
   process.stderr.write('ACK hardware-verifier runtime is incomplete. Reinstall ACK with npm install -g github:AdverserialAI/adverserial-confidential-kit. For a linked source checkout, run npm ci in that checkout.\n');
   process.exit(1);
@@ -46,12 +46,21 @@ const minimumGPUCount = Number.parseInt(process.env.ADVERSERIAL_MIN_GPU_COUNT ||
 if (!Number.isInteger(minimumGPUCount) || minimumGPUCount < 1) fail('ADVERSERIAL_MIN_GPU_COUNT must be a positive integer');
 
 try {
-	const verifier = createPhalaNVIDIAVerifier({ minimumGPUCount });
+	let policy;
+  if ((input.expectedEndpoint ?? input.endpoint) === 'https://api.adverserial.ai') {
+    const response = await fetch('https://verify.adverserial.ai/policies/production.json', {cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if (!response.ok) fail('Published runtime policy unavailable');
+    policy = validateRuntimePolicy(await response.json(), input.expectedModelId ?? input.model);
+    const w = input.evidence?.workload;
+    if (w?.compose_digest !== policy.deployment_configuration_digest || w?.proxy_version !== policy.proxy_version || w?.model_digest !== policy.model_artifact_digest || input.evidence?.tls_spki_sha256 !== policy.tls_spki_sha256) fail('Hardware evidence workload does not match approved policy');
+  }
+  const verifier = createPhalaNVIDIAVerifier({ minimumGPUCount: policy?.allowed_runtime.minimum_gpu_count ?? minimumGPUCount });
 	const result = await verifier({
 		evidence: input.evidence,
 		nonce: input.nonce,
 		expectedModelId: input.expectedModelId ?? input.model,
-		expectedEndpoint: input.expectedEndpoint ?? input.endpoint
+		expectedEndpoint: input.expectedEndpoint ?? input.endpoint,
+    expectedTDXPolicy: policy?.tdx ?? input.expectedTDXPolicy
 	});
 	if (!result || result.verified !== true) fail('hardware evidence rejected');
 	process.stdout.write(JSON.stringify({

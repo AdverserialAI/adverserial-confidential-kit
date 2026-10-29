@@ -9,3 +9,5 @@ export { verifyNVIDIAEvidence } from './nvidia.js';
 export type { NVIDIAEvidenceOptions, NVIDIAEvidenceResult } from './nvidia.js';
 export { verifyInferenceReceipt } from './inference-receipt.js';
 export type { InferenceReceiptProof, VerifyInferenceReceiptOptions } from './inference-receipt.js';
+export { validateRuntimePolicy } from './runtime-policy.js';
+export type { RuntimePolicy, TDXPolicy } from './runtime-policy.js';

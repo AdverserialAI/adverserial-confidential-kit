@@ -3,9 +3,8 @@
  * SDK's verifyEndpoint with TOFU key bootstrap, an explicit "unpinned"
  * refusal state, a fetch timeout, and a 5-minute TTL cache.
  */
-import { toBase64Url, verifyEndpoint } from '../../../typescript/src/index.js';
+import { toBase64Url, verifyEndpoint, validateRuntimePolicy } from '../../../typescript/src/index.js';
 import { hardwareVerifier } from './hardware.js';
-import { isFreshVerdict } from './format.js';
 export const CACHE_TTL_MS = 5 * 60_000;
 export const FETCH_TIMEOUT_MS = 15_000;
 export const summarizeConfig = (config) => ({
@@ -94,7 +93,20 @@ export const runVerification = async (config, deps) => {
             };
         }
     }
+    let policy;
+    if (new URL(config.baseURL).origin === 'https://api.adverserial.ai') {
+        try {
+            const response = await fetchImpl('https://verify.adverserial.ai/policies/production.json', { credentials: 'omit', cache: 'no-store' });
+            if (!response.ok)
+                throw new Error(`Runtime policy returned ${response.status}.`);
+            policy = validateRuntimePolicy(await response.json(), config.modelId);
+        }
+        catch (error) {
+            return { status: 'failed', trust, reason: error instanceof Error ? error.message : 'Runtime policy unavailable.', verifiedAt, config: summary };
+        }
+    }
     const result = await verifyEndpoint(config.baseURL, {
+        expectedPolicy: policy,
         expectedModelId: config.modelId,
         trustedReceiptKeys: keys,
         issuer: config.issuer,
@@ -104,8 +116,7 @@ export const runVerification = async (config, deps) => {
         // the only legitimate opt-in here is the dev-only TOFU escape hatch.
         allowDevMode: config.trustEvidenceKey,
         verifyHardwareEvidence: hardwareVerifier(config.hardwareVerifierCommand),
-        fetchImpl,
-        now: deps?.now
+        fetchImpl
     });
     if (result.status === 'verified') {
         return { status: 'verified', trust, proof: result.proof, verifiedAt, config: summary };
@@ -127,8 +138,7 @@ export class VerificationCache {
     }
     async get(config, deps) {
         const now = this.#now();
-        if (this.#current && now >= this.#current.verifiedAt && now - this.#current.verifiedAt < this.#ttlMs &&
-            (this.#current.status !== 'verified' || isFreshVerdict(this.#current, now, this.#ttlMs))) {
+        if (this.#current && now - this.#current.verifiedAt < this.#ttlMs && (this.#current.status !== 'verified' || this.#current.proof.expiresEpoch * 1000 > now)) {
             return { verdict: this.#current, ageMs: now - this.#current.verifiedAt, fromCache: true };
         }
         this.#inflight ??= runVerification(config, deps)

@@ -18,6 +18,7 @@
  */
 import { asArrayBuffer, evidenceDigest, fromBase64Url, sha256Digest, toBase64Url } from './canonjson.js';
 import { Identity } from 'ehbp';
+import { validateRuntimePolicy, checkWorkloadPolicy } from './runtime-policy.js';
 const textDecoder = new TextDecoder();
 const ONE_MINUTE_MS = 60_000;
 const asObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -87,6 +88,7 @@ export const verifyEndpoint = async (baseURL, options) => {
         }
         const fetchImpl = options.fetchImpl ?? fetch;
         const clock = options.now ?? Date.now;
+        const nowMs = clock();
         const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
         const attestationUrl = new URL(options.attestationUrl ?? '/attestation', endpoint);
         if (attestationUrl.protocol !== 'https:' || attestationUrl.origin !== endpoint.origin) {
@@ -109,9 +111,17 @@ export const verifyEndpoint = async (baseURL, options) => {
         if (!evidence || !receipt)
             throw new Error('The attestation response is missing evidence or a receipt.');
         const { claims, keyId } = await verifyReceiptSignature(receipt, options.trustedReceiptKeys);
+        let policy = options.expectedPolicy ? validateRuntimePolicy(options.expectedPolicy, options.expectedModelId) : undefined;
+        if (!policy && endpoint.origin === 'https://api.adverserial.ai') {
+            const response = await fetchImpl('https://verify.adverserial.ai/policies/production.json', { credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(15000) });
+            if (!response.ok)
+                throw new Error('The approved production policy is unavailable.');
+            policy = validateRuntimePolicy(await response.json(), options.expectedModelId);
+        }
+        if (policy)
+            checkWorkloadPolicy(policy, evidence, claims, keyId);
         const issuedAt = asEpochSeconds(claims.iat, 'iat');
         const expiresAt = asEpochSeconds(claims.exp, 'exp');
-        const nowMs = clock();
         if (expiresAt * 1000 <= nowMs)
             throw new Error('The verification receipt has expired.');
         if (issuedAt * 1000 > nowMs + ONE_MINUTE_MS) {
@@ -167,7 +177,8 @@ export const verifyEndpoint = async (baseURL, options) => {
             evidence,
             nonce,
             expectedModelId: options.expectedModelId,
-            expectedEndpoint
+            expectedEndpoint,
+            expectedTDXPolicy: policy?.tdx
         });
         if (!hardware || hardware.verified !== true || !asNonEmptyString(hardware.verifier)) {
             throw new Error('The hardware verifier did not accept the attestation evidence.');

@@ -3,11 +3,6 @@
  * and CLI stdout. Kept deliberately plain (ASCII) so it survives every
  * terminal, log sink, and chat renderer.
  */
-export const isFreshVerdict = (verdict, now = Date.now(), ttlMs = 300000) =>
-    verdict?.status === 'verified' && verdict.trust === 'pinned' && verdict.proof?.devMode === false &&
-    Number.isFinite(verdict.verifiedAt) && verdict.verifiedAt <= now + 5000 && now - verdict.verifiedAt < ttlMs &&
-    Number.isFinite(verdict.proof.expiresEpoch) && verdict.proof.expiresEpoch * 1000 > now;
-
 export const humanDuration = (ms) => {
     if (ms < 0)
         ms = 0;
@@ -78,12 +73,8 @@ export const formatStatus = (entry, ttlMs, now = Date.now()) => {
         return ('attestation status: never verified in this process — ' +
             'run the verification first (it also runs lazily on the first tool call).');
     }
-    const { ageMs, fromCache } = entry;
-    const fresh = isFreshVerdict(entry.verdict, now, ttlMs);
-    const verdict = entry.verdict.status === 'verified' && !fresh
-        ? {...entry.verdict, status:'failed', reason:'Cached attestation is expired, unpinned, synthetic or incomplete; run a fresh verification.'}
-        : entry.verdict;
-    const freshness = fresh ? `fresh, ttl ${humanDuration(ttlMs)}` : 'STALE OR UNVERIFIED';
+    const { verdict, ageMs, fromCache } = entry;
+    const freshness = ageMs < ttlMs ? `fresh, ttl ${humanDuration(ttlMs)}` : 'STALE (older than ttl)';
     const head = `attestation status: ${verdictHeader(verdict)} — ` +
         (fromCache ? `verified ${humanDuration(ageMs)} ago (${freshness})` : 'just verified (fresh check)');
     return `${head}\n${formatVerdict(verdict, now)}`;

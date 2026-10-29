@@ -16,6 +16,7 @@
  *
  * This module deliberately does not accept a bare { verified: true }.
  */
+import type { RuntimePolicy, TDXPolicy } from './runtime-policy.js';
 import type { JsonRecord } from './canonjson.js';
 export type TrustedReceiptKeys = Record<string, JsonWebKey>;
 /** Result produced by an independent TDX/GPU evidence verifier. */
@@ -36,8 +37,11 @@ export type HardwareEvidenceVerifier = (input: {
     nonce: string;
     expectedModelId: string;
     expectedEndpoint?: string;
+    expectedTDXPolicy?: TDXPolicy;
 }) => Promise<HardwareVerification>;
 export type VerifyEndpointOptions = {
+    /** Approved runtime identity, required by production integrations. */
+    expectedPolicy?: RuntimePolicy;
     /** Expected receipt claim `model_id`, e.g. "lordx64/cyberglm". */
     expectedModelId: string;
     /** Pinned receipt verification keys: JWS header kid -> public JWK (P-256). */

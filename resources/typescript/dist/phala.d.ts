@@ -16,7 +16,11 @@ import type { HardwareEvidenceVerifier } from './verify.js';
  * It does not silently accept NVIDIA evidence; use a composition that checks
  * that signed EAT bundle if your policy requires GPU-confidential proof.
  */
-export declare const verifyPhalaTDXEvidence: HardwareEvidenceVerifier;
+export declare const verifyPhalaTDXEvidence: ({ evidence, nonce, expectedTDXPolicy }: Parameters<HardwareEvidenceVerifier>[0], pccsURL?: string) => Promise<{
+    verified: boolean;
+    verifier: string;
+    tee: string;
+}>;
 /**
  * Creates a complete browser verifier for a Phala TDX + NVIDIA deployment.
  * It verifies both independent vendor evidence chains before returning a
@@ -26,4 +30,6 @@ export declare const verifyPhalaTDXEvidence: HardwareEvidenceVerifier;
 export declare const createPhalaNVIDIAVerifier: (options: {
     minimumGPUCount: number;
     maxGPUEvidenceAgeMs?: number;
+    fetchImpl?: typeof fetch;
+    pccsURL?: string;
 }) => HardwareEvidenceVerifier;

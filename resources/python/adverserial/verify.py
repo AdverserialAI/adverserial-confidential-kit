@@ -28,6 +28,7 @@ import http.client
 import json
 import secrets
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
@@ -185,6 +186,7 @@ def verify_endpoint(
     expected_endpoint: Optional[str] = None,
     expected_model_digest: Optional[str] = None,
     expected_runtime_digest: Optional[str] = None,
+    expected_policy: Optional[Mapping[str, Any]] = None,
     hardware_verifier: Optional[HardwareEvidenceVerifier] = None,
     allow_dev_mode: bool = False,
     attestation_url: Optional[str] = None,
@@ -225,6 +227,30 @@ def verify_endpoint(
         verify_es256(pinned_jwk, signing_input, signature)  # type: ignore[arg-type]
     except (InvalidSignature, ValueError) as exc:
         raise VerificationError("the verification receipt signature is invalid") from exc
+
+    policy = expected_policy
+    if policy is None and urlsplit(base_url).hostname == "api.adverserial.ai":
+        try:
+            request = urllib.request.Request("https://verify.adverserial.ai/policies/production.json", headers={"Accept": "application/json", "Cache-Control": "no-cache"})
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                policy = json.load(response)
+        except Exception as exc:
+            raise VerificationError("the approved runtime policy could not be loaded") from exc
+    if policy is not None:
+        _expect(policy.get("status") == "active" and policy.get("model_id") == expected_model_id, "no active policy matches the selected model")
+        workload = evidence.get("workload") or {}
+        comparisons = [
+            (claims.get("model_digest"), policy.get("model_artifact_digest"), "model digest"),
+            (claims.get("runtime_digest"), policy.get("runtime_image_digest"), "runtime digest"),
+            (workload.get("model_digest"), policy.get("model_artifact_digest"), "workload model digest"),
+            (workload.get("compose_digest"), policy.get("deployment_configuration_digest"), "deployment configuration digest"),
+            (workload.get("proxy_version"), policy.get("proxy_version"), "proxy release"),
+            (evidence.get("tls_spki_sha256"), policy.get("tls_spki_sha256"), "TLS key"),
+        ]
+        for actual, expected, name in comparisons:
+            _expect(isinstance(expected, str) and bool(expected) and actual == expected, f"the {name} does not match approved policy")
+        policy_key = (policy.get("receipt_keys") or {}).get(key_id) or {}
+        _expect(all(policy_key.get(k) == pinned_jwk.get(k) for k in ("kty", "crv", "x", "y")), "the receipt key does not match approved policy")
 
     # --- claims ------------------------------------------------------------
     iat, exp = claims.get("iat"), claims.get("exp")
@@ -366,6 +392,7 @@ def verify_endpoint(
         raise VerificationError("the independent hardware verifier failed") from exc
     if not isinstance(hardware, HardwareVerification) or not hardware.verified or not hardware.verifier:
         raise VerificationError("the independent hardware verifier did not accept the evidence")
+
     if exp <= clock():
         raise VerificationError("the verification receipt expired during hardware verification")
 
