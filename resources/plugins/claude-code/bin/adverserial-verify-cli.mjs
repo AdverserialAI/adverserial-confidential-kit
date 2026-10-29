@@ -1,4 +1,6 @@
-import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);
+// adverserial-verify — self-contained bundle (built by scripts/build-cli-bundle.mjs)
+import { createRequire as __createRequire } from 'node:module';
+const require = __createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -34024,10 +34026,14 @@ var decoder2 = new TextDecoder();
 
 // plugins/shared/src/hardware.ts
 import { spawn } from "node:child_process";
+import { isAbsolute as isAbsolute2 } from "node:path";
 var MAX_OUTPUT = 64 << 10;
 var TIMEOUT_MS = 2e4;
 var readOutput = (command, input) => new Promise((resolve, reject) => {
-  const child = spawn(command, [], { shell: false, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  const isJavaScript = /\.m?js$/.test(command);
+  const node = process.env.ADVERSERIAL_NODE_EXECUTABLE || process.execPath;
+  if (isJavaScript && !isAbsolute2(node)) return reject(new Error("ADVERSERIAL_NODE_EXECUTABLE must be an absolute executable path."));
+  const child = spawn(isJavaScript ? node : command, isJavaScript ? [command] : [], { shell: false, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   let stdout = "";
   let stderr = "";
   let exceeded = false;
@@ -34381,79 +34387,4 @@ ${USAGE}`);
   return verdict.status === "verified" ? 0 : 1;
 };
 process.exitCode = await main();
-/*! Bundled license information:
-
-pvtsutils/build/index.js:
-  (*!
-   * MIT License
-   * 
-   * Copyright (c) 2017-2024 Peculiar Ventures, LLC
-   * 
-   * Permission is hereby granted, free of charge, to any person obtaining a copy
-   * of this software and associated documentation files (the "Software"), to deal
-   * in the Software without restriction, including without limitation the rights
-   * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-   * copies of the Software, and to permit persons to whom the Software is
-   * furnished to do so, subject to the following conditions:
-   * 
-   * The above copyright notice and this permission notice shall be included in all
-   * copies or substantial portions of the Software.
-   * 
-   * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   * SOFTWARE.
-   * 
-   *)
-
-pvutils/build/utils.js:
-  (*!
-   Copyright (c) Peculiar Ventures, LLC
-  *)
-
-asn1js/build/index.js:
-  (*!
-   * Copyright (c) 2014, GMO GlobalSign
-   * Copyright (c) 2015-2022, Peculiar Ventures
-   * All rights reserved.
-   * 
-   * Author 2014-2019, Yury Strozhevsky
-   * 
-   * Redistribution and use in source and binary forms, with or without modification,
-   * are permitted provided that the following conditions are met:
-   * 
-   * * Redistributions of source code must retain the above copyright notice, this
-   *   list of conditions and the following disclaimer.
-   * 
-   * * Redistributions in binary form must reproduce the above copyright notice, this
-   *   list of conditions and the following disclaimer in the documentation and/or
-   *   other materials provided with the distribution.
-   * 
-   * * Neither the name of the copyright holder nor the names of its
-   *   contributors may be used to endorse or promote products derived from
-   *   this software without specific prior written permission.
-   * 
-   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-   * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-   * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-   * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-   * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-   * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-   * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-   * 
-   *)
-
-@noble/curves/utils.js:
-@noble/curves/abstract/modular.js:
-@noble/curves/abstract/curve.js:
-@noble/curves/abstract/edwards.js:
-@noble/curves/abstract/montgomery.js:
-@noble/curves/ed25519.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-*/
+/*! For license information please see adverserial-verify.bundle.mjs.LEGAL.txt */
