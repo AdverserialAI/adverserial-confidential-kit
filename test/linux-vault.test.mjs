@@ -115,3 +115,45 @@ test('Linux key-profile migration encrypts through the real CLI without the test
     assert.ok(!(await readFile(path, 'utf8')).includes(secret));
   }
 });
+
+// Drives the real CLI on a pseudo-terminal, answering each hidden prompt with `answer`.
+const PTY = `
+import os, pty, sys, select, time
+answer = sys.argv[1].encode() + b"\\r"
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(sys.argv[2], sys.argv[2:])
+out = b""; prompts = 0; deadline = time.time() + 60
+while time.time() < deadline:
+    ready, _, _ = select.select([fd], [], [], 0.2)
+    if ready:
+        try: chunk = os.read(fd, 4096)
+        except OSError: break
+        if not chunk: break
+        out += chunk
+        while out.count(b"(input hidden)") > prompts:
+            prompts += 1
+            os.write(fd, answer)
+_, status = os.waitpid(pid, 0)
+print(prompts, os.waitstatus_to_exitcode(status))
+`;
+
+function viaPty(answer, env, args) {
+  const cli = fileURLToPath(new URL('../bin/ack.mjs', import.meta.url));
+  const result = spawnSync('python3', ['-c', PTY, answer, process.execPath, cli, ...args], { env, encoding: 'utf8' });
+  const [prompts, status] = result.stdout.trim().split(' ').map(Number);
+  return { prompts, status, stderr: result.stderr };
+}
+
+const havePty = process.platform === 'linux' && spawnSync('python3', ['-c', 'import pty']).status === 0;
+
+test('a passphrase with surrounding spaces typed at the masked prompt matches the environment variable', { skip: !havePty }, async (t) => {
+  const { home, env: base } = await fixture(t);
+  await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 1, apiKey: 'fake-key-for-linux-vault-regression-only', model: 'lordx64/cyberglm', endpoint: 'https://api.adverserial.ai/v1' }));
+  const env = { ...base, ACK_HOME: home, ACK_QUIET: '1', ACK_LINUX_KEYSTORE: 'file' };
+  delete env.ACK_TEST_STORAGE_KEY;
+  const created = viaPty('  spaced pass  ', env, ['keys', 'list']);
+  assert.equal(created.status, 0, created.stderr);
+  const unlocked = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/ack.mjs', import.meta.url)), 'keys', 'list'], { env: { ...env, ACK_KEYSTORE_PASSPHRASE: '  spaced pass  ' }, encoding: 'utf8' });
+  assert.equal(unlocked.status, 0, unlocked.stderr);
+});
