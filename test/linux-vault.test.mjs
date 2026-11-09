@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, utimes, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,7 @@ const FAKE = `#!/bin/sh
 echo "$@" >> "$FAKE_STORE/argv.log"
 [ -n "$FAKE_FAIL" ] && { echo "secret-tool: Cannot autolaunch D-Bus" >&2; exit 1; }
 case "$1" in
-  store) cat > "$FAKE_STORE/secret" ;;
+  store) sleep 0.2; cat > "$FAKE_STORE/secret" ;;
   lookup) [ -f "$FAKE_STORE/secret" ] && cat "$FAKE_STORE/secret" || exit 1 ;;
   *) exit 2 ;;
 esac
@@ -28,14 +29,15 @@ async function fixture(t, extra = {}) {
   const bin = join(root, 'bin');
   const store = join(root, 'store');
   const home = join(root, 'home');
-  await Promise.all([bin, store, home].map((path) => mkdir(path)));
+  const run = join(root, 'run');
+  await Promise.all([bin, store, home, run].map((path) => mkdir(path)));
   await writeFile(join(bin, 'secret-tool'), FAKE, { mode: 0o700 });
   // Start from a clean keystore configuration so results never depend on the developer's vault settings.
   const inherited = { ...process.env };
   delete inherited.ACK_LINUX_KEYSTORE;
   delete inherited.ACK_KEYSTORE_PASSPHRASE;
-  const env = { ...inherited, PATH: `${bin}:${process.env.PATH}`, FAKE_STORE: store, ...extra };
-  return { root, home, store, env };
+  const env = { ...inherited, PATH: `${bin}:${process.env.PATH}`, FAKE_STORE: store, XDG_RUNTIME_DIR: run, ...extra };
+  return { root, home, store, run, env };
 }
 
 test('Secret Service key is created once, reused, and never passed in arguments', { skip }, async (t) => {
@@ -168,4 +170,37 @@ test('interactive file creation prompts once plus confirmation, then existing fi
   labels.length = 0;
   assert.deepEqual(await linuxStorageKey(home, env, { ...names, askPassphrase }), key);
   assert.deepEqual(labels, ['Key-store passphrase']);
+});
+
+const lockFile = (run) => join(run, `ack-storage-key-${createHash('sha256').update(`${names.service}\0${names.account}`).digest('hex').slice(0, 16)}.lock`);
+
+test('vaults in different homes share one keyring identity, so they share one lock and one key', { skip }, async (t) => {
+  const { root, store, env } = await fixture(t);
+  const homes = await Promise.all(['a', 'b', 'c'].map(async (name) => { const home = join(root, name); await mkdir(home); return home; }));
+  const keys = await Promise.all(homes.map((home) => linuxStorageKey(home, env, names)));
+  assert.deepEqual(keys[1], keys[0]);
+  assert.deepEqual(keys[2], keys[0]);
+  assert.equal((await readFile(join(store, 'argv.log'), 'utf8')).match(/^store /gm).length, 1);
+  assert.deepEqual((await readdir(env.XDG_RUNTIME_DIR)).filter((name) => name.startsWith('ack-storage-key-')), []);
+});
+
+test('a stale lock left by a crashed process is reclaimed', { skip }, async (t) => {
+  const { home, store, run, env } = await fixture(t);
+  await writeFile(lockFile(run), 'dead-owner');
+  const old = new Date(Date.now() - 120000);
+  await utimes(lockFile(run), old, old);
+  assert.equal((await linuxStorageKey(home, env, names)).length, 32);
+  assert.equal((await readFile(join(store, 'argv.log'), 'utf8')).match(/^store /gm).length, 1);
+  assert.deepEqual((await readdir(run)).filter((name) => name.startsWith('ack-storage-key-')), []);
+});
+
+test('a live lock is never reclaimed and is left intact for its owner', { skip }, async (t) => {
+  const { home, store, run, env } = await fixture(t);
+  await writeFile(lockFile(run), 'live-owner');
+  const pending = linuxStorageKey(home, env, names);
+  await new Promise((done) => setTimeout(done, 600));
+  await assert.rejects(readFile(join(store, 'argv.log'), 'utf8').then((log) => { if (/^store /m.test(log)) throw new Error('stored under a live lock'); return Promise.reject(new Error('ok')); }), /ok/);
+  assert.equal(await readFile(lockFile(run), 'utf8'), 'live-owner');
+  await rm(lockFile(run));
+  assert.equal((await pending).length, 32);
 });
