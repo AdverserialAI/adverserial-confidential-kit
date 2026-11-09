@@ -131,7 +131,8 @@ This is a local UI measurement, not an inference-latency promise.
 This report covers the versions above and the currently published CyberGLM
 configuration. It does not assert that every upstream release, OS, terminal,
 model, arbitrary plugin combination or possible swarm permutation was tested.
-Linux encrypted credential storage is not implemented. Windows DPAPI is covered below.
+Linux encrypted credential storage (Secret Service and the opt-in passphrase
+file) is covered by `test/linux-vault.test.mjs`. Windows DPAPI is covered below.
 
 Some live requests encountered temporary backend-warming 503 responses; the
 harnesses retried and completed. A sandboxed Codex/DeepSeek shell may deny the
@@ -166,5 +167,6 @@ Tested locally on Windows with Node 24.20.0 and Python 3.14.7:
 
 Tests use dummy credentials. These checks do not certify live inference,
 upstream billing, or every harness's Windows support. The CI matrix runs the
-Node and Python suites plus real runtime startup on Windows, macOS and Linux;
-Linux runtime tests do not imply Linux vault support.
+Node and Python suites plus real runtime startup on Windows, macOS and Linux.
+Linux vault tests use a stand-in `secret-tool`; they do not exercise a live
+keyring daemon.
