@@ -6,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/ACK-0.2.5-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
-[![Platform](https://img.shields.io/badge/key_vault-Keychain_%7C_Windows_DPAPI-555)](#requirements)
+[![Platform](https://img.shields.io/badge/key_vault-Keychain_%7C_Windows_DPAPI_%7C_Secret_Service-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
 
 [Website](https://adverserial.ai) · [How confidentiality works](https://adverserial.ai/confidential/) · [Verify a runtime](https://verify.adverserial.ai) · [SDK](https://github.com/AdverserialAI/confidential-sdk) · [Security](mailto:security@adverserial.ai)
@@ -59,8 +59,12 @@ without waiting for that release.
 
 ### Requirements
 
-- **macOS or Windows** for encrypted key storage through Keychain or Windows
-  DPAPI (bound to your Windows account). Linux credential storage is not yet implemented.
+- **macOS, Windows or Linux** for encrypted key storage through Keychain, Windows
+  DPAPI (bound to your Windows account) or the Linux Secret Service (GNOME
+  Keyring, KWallet). Linux needs `secret-tool` (package `libsecret-tools`) and an
+  unlocked keyring; headless hosts can opt in to a passphrase-protected key file
+  with `ACK_LINUX_KEYSTORE=file` (passphrase from `ACK_KEYSTORE_PASSPHRASE` or a
+  masked prompt). ACK never falls back to the file automatically.
 - **Node.js 18+**, npm and **Python 3.10+** on PATH.
 - An Adverserial API key with access to a currently published confidential model.
 - The official CLI for each harness you want to use. ACK detects installed
@@ -85,6 +89,9 @@ Windows settings default to `%USERPROFILE%/.config/adverserial` when `HOME`
 is unset; `ACK_HOME` still overrides this location. The `storage-key.dpapi`
 file contains only the Windows-protected storage key. Keep it with `ack.json`
 when backing up the vault; it is not portable to a different Windows account.
+In Linux file mode, `storage-key.enc` holds the storage key wrapped with scrypt
+and AES-256-GCM; keep it with `ack.json`, because without it (or the
+passphrase) the saved keys cannot be recovered.
 Older Codex versions without `plugin add` use the bundled local attestation
 skill. Other harnesses still require an upstream CLI that supports your OS.
 
@@ -213,7 +220,7 @@ ack keys delete personal
 ```
 
 Keys are encrypted with AES-256-GCM in `~/.config/adverserial/ack.json` using a
-random storage key held in macOS Keychain or protected with Windows DPAPI. Key entry is masked; listings show
+random storage key held in macOS Keychain, the Linux Secret Service or protected with Windows DPAPI. Key entry is masked; listings show
 only a short masked identifier. Secret values are excluded from console history,
 preferences and activity logs. ACK refuses to delete the active profile: select
 another one first. Existing plaintext ACK state is migrated into encrypted
