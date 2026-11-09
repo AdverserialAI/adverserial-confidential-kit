@@ -157,3 +157,15 @@ test('a passphrase with surrounding spaces typed at the masked prompt matches th
   const unlocked = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/ack.mjs', import.meta.url)), 'keys', 'list'], { env: { ...env, ACK_KEYSTORE_PASSPHRASE: '  spaced pass  ' }, encoding: 'utf8' });
   assert.equal(unlocked.status, 0, unlocked.stderr);
 });
+
+test('interactive file creation prompts once plus confirmation, then existing files prompt once', { skip }, async (t) => {
+  const { home, env: base } = await fixture(t);
+  const env = { ...base, ACK_LINUX_KEYSTORE: 'file' };
+  const labels = [];
+  const askPassphrase = async (label) => { labels.push(label); return ' pass '; };
+  const key = await linuxStorageKey(home, env, { ...names, askPassphrase });
+  assert.deepEqual(labels, ['Key-store passphrase', 'Confirm passphrase']);
+  labels.length = 0;
+  assert.deepEqual(await linuxStorageKey(home, env, { ...names, askPassphrase }), key);
+  assert.deepEqual(labels, ['Key-store passphrase']);
+});
