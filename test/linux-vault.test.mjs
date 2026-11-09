@@ -30,7 +30,11 @@ async function fixture(t, extra = {}) {
   const home = join(root, 'home');
   await Promise.all([bin, store, home].map((path) => mkdir(path)));
   await writeFile(join(bin, 'secret-tool'), FAKE, { mode: 0o700 });
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_STORE: store, ...extra };
+  // Start from a clean keystore configuration so results never depend on the developer's vault settings.
+  const inherited = { ...process.env };
+  delete inherited.ACK_LINUX_KEYSTORE;
+  delete inherited.ACK_KEYSTORE_PASSPHRASE;
+  const env = { ...inherited, PATH: `${bin}:${process.env.PATH}`, FAKE_STORE: store, ...extra };
   return { root, home, store, env };
 }
 
