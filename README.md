@@ -229,7 +229,7 @@ process environment, so use trusted upstream CLIs and workspace tools.
 
 ```sh
 ack models
-ack model lordx64/cyberglm
+ack model adverserial/cyberseek
 ack upgrade
 ack doctor
 ack status

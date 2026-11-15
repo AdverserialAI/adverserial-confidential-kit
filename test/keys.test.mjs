@@ -45,7 +45,7 @@ test('migrates plaintext state to encrypted named profiles and switches the acti
     await writeFile(join(home, 'ack.json'), JSON.stringify({
       version: 1,
       apiKey: firstKey,
-      model: 'lordx64/cyberglm',
+      model: 'adverserial/cyberseek',
       endpoint: 'https://api.adverserial.ai/v1',
       updatedAt: '2026-10-17T00:00:00.000Z'
     }));
@@ -91,7 +91,7 @@ test('a denied Keychain read never replaces the key that protects existing profi
  try {
   const log=join(home,'security-calls');const binary=join(home,'security');
   await writeFile(binary,'#!/bin/sh\nprintf "%s\\n" "$1" >> "$ACK_SECURITY_CALLS"\nprintf "Keychain access denied\\n" >&2\nexit 36\n',{mode:0o700});
-  const saved={version:2,apiKeyProfiles:{default:{encryptedKey:encrypt('secret-before-denial'),mask:'sec••••••••ial'}},activeKeyProfile:'default',model:'lordx64/cyberglm',endpoint:'https://api.adverserial.ai/v1'};
+  const saved={version:2,apiKeyProfiles:{default:{encryptedKey:encrypt('secret-before-denial'),mask:'sec••••••••ial'}},activeKeyProfile:'default',model:'adverserial/cyberseek',endpoint:'https://api.adverserial.ai/v1'};
   const statePath=join(home,'ack.json');await writeFile(statePath,JSON.stringify(saved));
   const env={...process.env,ACK_HOME:home,ACK_QUIET:'1',PATH:home,ACK_SECURITY_CALLS:log};delete env.ACK_TEST_STORAGE_KEY;
   const result=spawnSync(process.execPath,[cli,'keys','list'],{env,encoding:'utf8'});

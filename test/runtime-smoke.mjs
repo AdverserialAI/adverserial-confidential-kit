@@ -9,7 +9,7 @@ import { spawn } from '../lib/platform.mjs';
 
 const home = await mkdtemp(join(tmpdir(), 'ack runtime smoke '));
 const env = { ...process.env, ACK_HOME: home, ADVERSERIAL_GATEWAY_PORT: '' };
-const state = { apiKey: 'dummy-local-startup-only', model: 'lordx64/cyberglm', endpoint: 'https://api.adverserial.ai/v1' };
+const state = { apiKey: 'dummy-local-startup-only', model: 'adverserial/cyberseek', endpoint: 'https://api.adverserial.ai/v1' };
 const sessions = [];
 const start = () => startSessionGateway(state, env, {
   spawnImpl(command, args, options) {

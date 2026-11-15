@@ -1,5 +1,5 @@
 # Use with: codex --profile confidential
-model = "lordx64/cyberglm"
+model = "adverserial/cyberseek"
 model_provider = "adverserial_confidential"
 
 [model_providers.adverserial_confidential]

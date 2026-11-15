@@ -17,14 +17,13 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .config import Config, ConfigError
+from .config import Config, ConfigError, MAX_LOCAL_REQUEST_BYTES
 from adverserial import VerificationError
 
 from .compat import anthropic_to_chat, chat_to_anthropic, chat_to_response, responses_to_chat
 from .core import AuthorizationError, ClientRequestError, Dispatcher, GatewayError
 
 
-MAX_LOCAL_REQUEST_BYTES = 8 * 1024 * 1024
 MAX_LOCAL_CONNECTIONS = 16
 LOCAL_CONNECTION_TIMEOUT_SECONDS = 20.0
 LOCAL_BODY_DEADLINE_SECONDS = 30.0

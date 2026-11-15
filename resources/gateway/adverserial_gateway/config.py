@@ -13,7 +13,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-CANONICAL_MODELS = frozenset({"lordx64/cyberglm", "lordx64/cyberkimi"})
+MAX_LOCAL_REQUEST_BYTES = 8 * 1024 * 1024
+# Match the dispatcher's serialized-body headroom; this is an entitlement
+# estimate ceiling, not an increase to the HTTP body or model context limit.
+MAX_ESTIMATED_INPUT_BOUND = 2 * MAX_LOCAL_REQUEST_BYTES + 4096
+
+CANONICAL_MODELS = frozenset({"adverserial/cyberseek"})
 
 
 class ConfigError(ValueError):
@@ -113,6 +118,6 @@ class Config:
             audience=env.get("ADVERSERIAL_AUDIENCE", "https://chat.adverserial.ai"),
             receipt_keys=data,
             hardware_verifier_command=_hardware_verifier_command(command),
-            max_input_tokens=_positive_int("ADVERSERIAL_MAX_INPUT_TOKENS", env.get("ADVERSERIAL_MAX_INPUT_TOKENS", "6291456"), 6291456),
+            max_input_tokens=_positive_int("ADVERSERIAL_MAX_INPUT_TOKENS", env.get("ADVERSERIAL_MAX_INPUT_TOKENS", str(MAX_ESTIMATED_INPUT_BOUND)), MAX_ESTIMATED_INPUT_BOUND),
             max_output_tokens=_positive_int("ADVERSERIAL_MAX_OUTPUT_TOKENS", env.get("ADVERSERIAL_MAX_OUTPUT_TOKENS", "65536"), 65536),
         )

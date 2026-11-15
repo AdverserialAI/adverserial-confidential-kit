@@ -9,11 +9,11 @@
         "apiKey": "{env:ADVERSERIAL_API_KEY}"
       },
       "models": {
-        "lordx64/cyberglm": {
-          "name": "CyberGLM — verified confidential runtime"
+        "adverserial/cyberseek": {
+          "name": "CyberSeek — verified confidential runtime"
         }
       }
     }
   },
-  "model": "adverserial/lordx64/cyberglm"
+  "model": "adverserial/adverserial/cyberseek"
 }

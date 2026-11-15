@@ -40,6 +40,12 @@ def _text(value: Any, *, response: bool = False) -> str:
             # Thinking is display-only here. The actual next-turn tool state
             # is represented by the structured tool call/result below.
             continue
+        if not response and kind == "tool_reference":
+            name = block.get("tool_name")
+            if not isinstance(name, str) or not name:
+                raise ClientRequestError("tool_reference requires a tool_name")
+            parts.append("Available tool: " + name)
+            continue
         if kind not in accepted or not isinstance(block.get("text"), str):
             raise ClientRequestError("only text content is available through the confidential gateway")
         parts.append(block["text"])
@@ -122,19 +128,59 @@ def _anthropic_messages(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     return messages
 
 
-def _anthropic_tools(value: Any) -> list[dict[str, Any]]:
+def _referenced_tools(payload: Mapping[str, Any]) -> set[str]:
+    """Hydrate only tools explicitly discovered by this client's ToolSearch.
+
+    References are resolved against the current request's own catalog below;
+    no shared catalog or state can leak between local sessions.
+    """
+    names: set[str] = set()
+    for message in payload.get("messages", []):
+        content = message.get("content", []) if isinstance(message, Mapping) else []
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, Mapping) or block.get("type") != "tool_result":
+                continue
+            inner = block.get("content", [])
+            if not isinstance(inner, list):
+                continue
+            for reference in inner:
+                if isinstance(reference, Mapping) and reference.get("type") == "tool_reference":
+                    name = reference.get("tool_name")
+                    if not isinstance(name, str) or not name:
+                        raise ClientRequestError("tool_reference requires a tool_name")
+                    names.add(name)
+    return names
+
+
+def _anthropic_tools(value: Any, referenced: set[str] | None = None) -> list[dict[str, Any]]:
     if value is None:
         return []
     if not isinstance(value, list):
         raise ClientRequestError("Anthropic tools must be an array")
     converted: list[dict[str, Any]] = []
+    catalog: set[str] = set()
+    referenced = referenced or set()
     for tool in value:
         if not isinstance(tool, Mapping) or not isinstance(tool.get("name"), str) or not tool["name"]:
             raise ClientRequestError("invalid Anthropic tool")
+        if tool["name"] in catalog:
+            raise ClientRequestError("duplicate Anthropic tool name")
+        catalog.add(tool["name"])
+        deferred = tool.get("defer_loading", False)
+        if not isinstance(deferred, bool):
+            raise ClientRequestError("defer_loading must be a boolean")
         schema = tool.get("input_schema", {"type": "object"})
         if not isinstance(schema, Mapping):
             raise ClientRequestError("Anthropic tool input_schema must be an object")
+        if deferred and tool["name"] not in referenced:
+            continue
         converted.append({"type": "function", "function": {"name": tool["name"], "description": tool.get("description", ""), "parameters": dict(schema)}})
+    if referenced - catalog:
+        raise ClientRequestError("tool_reference names a tool absent from this request's catalog")
+    if len(converted) > 64:
+        raise ClientRequestError("More than 64 active tools. Enable Claude tool search (ENABLE_TOOL_SEARCH=true) or narrow the connected MCP tool catalog; no tools were silently removed.")
     return converted
 
 
@@ -151,10 +197,13 @@ def anthropic_to_chat(payload: Mapping[str, Any]) -> dict[str, Any]:
             out[name] = payload[name]
     if payload.get("stop_sequences"):
         out["stop"] = payload["stop_sequences"]
-    tools = _anthropic_tools(payload.get("tools"))
+    referenced = _referenced_tools(payload)
+    choice = payload.get("tool_choice")
+    if isinstance(choice, Mapping) and choice.get("type") == "tool" and isinstance(choice.get("name"), str):
+        referenced.add(choice["name"])
+    tools = _anthropic_tools(payload.get("tools"), referenced)
     if tools:
         out["tools"] = tools
-    choice = payload.get("tool_choice")
     if isinstance(choice, Mapping):
         kind = choice.get("type")
         if kind == "tool":

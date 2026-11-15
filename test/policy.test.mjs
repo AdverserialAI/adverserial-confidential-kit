@@ -8,14 +8,14 @@ import { fetchProductionPolicy } from '../lib/ack.mjs';
 
 test('rejects a policy without pinned receipt keys', async () => {
   await assert.rejects(
-    () => fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'lordx64/cyberglm', receipt_keys: {} }) }) }),
+    () => fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: {} }) }) }),
     /incomplete/
   );
 });
 
 test('accepts an active P-256 receipt-key policy', async () => {
-  const result = await fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'lordx64/cyberglm', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } }) }) });
-  assert.equal(result.model_id, 'lordx64/cyberglm');
+  const result = await fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } }) }) });
+  assert.equal(result.model_id, 'adverserial/cyberseek');
 });
 
 test('the packaged hardware verifier resolves its bundled runtime', async () => {
@@ -28,12 +28,12 @@ test('finds an explicitly configured harness binary without relying on PATH', ()
 });
 
 test('launches Oh My Pi with the Node-backed bundled verifier', async () => {
-  const selected = await harnessCommand('oh-my-pi', { apiKey: 'test-key', model: 'lordx64/cyberglm' }, {
+  const selected = await harnessCommand('oh-my-pi', { apiKey: 'test-key', model: 'adverserial/cyberseek' }, {
     HOME: tmpdir(), PATH: '', ACK_OMP_BIN: process.execPath
   });
   assert.equal(selected.command, process.execPath);
   assert.match(selected.env.ADVERSERIAL_VERIFY_COMMAND, /plugins[\\/]adverserial-verify[\\/]bin[\\/]adverserial-verify\.mjs$/);
-  assert.match(selected.args.join(' '), /adverserial-confidential\/lordx64\/cyberglm/);
+  assert.match(selected.args.join(' '), /adverserial-confidential\/adverserial\/cyberseek/);
 });
 
 test('creates and refreshes an isolated managed Kimi model alias', async () => {
@@ -42,11 +42,11 @@ test('creates and refreshes an isolated managed Kimi model alias', async () => {
   try {
     await writeFile(join(home, 'preserved.toml'), '');
     const env = { HOME: home, KIMI_CODE_HOME: kimiHome, ADVERSERIAL_GATEWAY_PORT: '8766' };
-    const state = { apiKey: 'test-key', model: 'lordx64/cyberglm' };
+    const state = { apiKey: 'test-key', model: 'adverserial/cyberseek' };
     assert.equal(await configureKimi(state, env), 'adverserial_confidential');
     let config = await readFile(join(kimiHome, 'config.toml'), 'utf8');
     assert.match(config, /\[models\.adverserial_confidential\]/);
-    assert.match(config, /model = "lordx64\/cyberglm"/);
+    assert.match(config, /model = "adverserial\/cyberseek"/);
     assert.match(config, /base_url = "http:\/\/127\.0\.0\.1:8766\/v1"/);
     await configureKimi({ ...state, model: 'lordx64/cyberkimi' }, env);
     config = await readFile(join(kimiHome, 'config.toml'), 'utf8');
@@ -61,7 +61,7 @@ test('installs OpenCode verifier plugin files locally and gives the slash comman
   const home = await mkdtemp(join(tmpdir(), 'ack-opencode-'));
   try {
     const env = { HOME: home, ADVERSERIAL_GATEWAY_PORT: '8766' };
-    const state = { apiKey: 'test-key', model: 'lordx64/cyberglm' };
+    const state = { apiKey: 'test-key', model: 'adverserial/cyberseek' };
     const configured = await configureOpenCode(state, env);
     const root = join(configured.XDG_CONFIG_HOME, 'opencode');
     const wrapper = await readFile(join(root, 'plugins', 'adverserial.ts'), 'utf8');

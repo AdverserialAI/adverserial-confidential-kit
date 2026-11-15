@@ -100,9 +100,13 @@ def canonical_model_id(model: str) -> str:
     if model in CANONICAL_MODELS:
         return model
     normalized = model.strip().lower()
-    if normalized == "cyberglm" or normalized.startswith("claude-"):
-        return "lordx64/cyberglm"
-    raise ClientRequestError("Use a canonical confidential model ID: lordx64/cyberglm or lordx64/cyberkimi.")
+    if normalized in CANONICAL_MODELS:
+        return normalized
+    if normalized in {"cyberseek", "cyberglm", "cyberkimi"} or normalized.startswith("claude-"):
+        if normalized in {"cyberglm", "cyberkimi"}:
+            raise ClientRequestError("CyberKimi and CyberGLM are available only on request.")
+        return "adverserial/cyberseek"
+    raise ClientRequestError("Use the canonical confidential model ID: adverserial/cyberseek. CyberKimi and CyberGLM are available only on request.")
 
 
 def requested_output_tokens(payload: Mapping[str, Any]) -> int:

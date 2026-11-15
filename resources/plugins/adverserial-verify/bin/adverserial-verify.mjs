@@ -30170,7 +30170,7 @@ import path from "node:path";
 import { accessSync, constants, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 var DEFAULT_BASE_URL = "https://api.adverserial.ai/v1";
-var DEFAULT_MODEL_ID = "lordx64/cyberglm";
+var DEFAULT_MODEL_ID = "adverserial/cyberseek";
 var DEFAULT_ISSUER = "https://verify.adverserial.ai";
 var DEFAULT_AUDIENCE = "https://chat.adverserial.ai";
 var ConfigError = class extends Error {
@@ -34286,7 +34286,7 @@ exit codes: 0 = endpoint verified, 1 = failed / unpinned / stale cache / error
 
 environment:
   ADVERSERIAL_API_URL             endpoint base URL (default https://api.adverserial.ai/v1)
-  ADVERSERIAL_MODEL               expected model id (default lordx64/cyberglm)
+  ADVERSERIAL_MODEL               expected model id (default adverserial/cyberseek)
   ADVERSERIAL_ISSUER              receipt issuer (default https://verify.adverserial.ai)
   ADVERSERIAL_AUDIENCE            receipt audience (default https://chat.adverserial.ai)
   ADVERSERIAL_EXPECTED_ENDPOINT   also pin the receipt's endpoint claim

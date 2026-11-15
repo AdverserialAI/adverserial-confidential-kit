@@ -5,6 +5,52 @@ from adverserial_gateway.core import ClientRequestError
 
 
 class CompatibilityTests(unittest.TestCase):
+    def deferred_request(self):
+        return {
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hello"}],
+            "tools": [{"name": "ToolSearch", "input_schema": {"type": "object"}}] + [
+                {"name": f"mcp_test_{i}", "defer_loading": True, "input_schema": {"type": "object"}}
+                for i in range(100)
+            ],
+        }
+
+    def test_claude_large_deferred_catalog_sends_only_search(self):
+        request = self.deferred_request()
+        chat = anthropic_to_chat(request)
+        self.assertEqual([t["function"]["name"] for t in chat["tools"]], ["ToolSearch"])
+        self.assertEqual(len(request["tools"]), 101)
+
+    def test_claude_search_result_hydrates_exact_referenced_schema(self):
+        request = self.deferred_request()
+        request["messages"] += [
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_search", "name": "ToolSearch", "input": {"query": "test"}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_search", "content": [{"type": "tool_reference", "tool_name": "mcp_test_99"}]}]},
+        ]
+        chat = anthropic_to_chat(request)
+        self.assertEqual([t["function"]["name"] for t in chat["tools"]], ["ToolSearch", "mcp_test_99"])
+        self.assertEqual(chat["messages"][-1], {"role": "tool", "tool_call_id": "search", "content": "Available tool: mcp_test_99"})
+        # Another request has no access to this request's discovered tools.
+        self.assertEqual(len(anthropic_to_chat(self.deferred_request())["tools"]), 1)
+
+    def test_claude_forced_deferred_tool_is_available(self):
+        request = self.deferred_request()
+        request["tool_choice"] = {"type": "tool", "name": "mcp_test_99"}
+        self.assertEqual(len(anthropic_to_chat(request)["tools"]), 2)
+
+    def test_claude_rejects_oversized_active_catalog_without_truncation(self):
+        request = self.deferred_request()
+        for tool in request["tools"]:
+            tool.pop("defer_loading", None)
+        with self.assertRaisesRegex(ClientRequestError, "64 active tools"):
+            anthropic_to_chat(request)
+
+    def test_claude_rejects_reference_outside_current_catalog(self):
+        request = self.deferred_request()
+        request["messages"] = [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_search", "content": [{"type": "tool_reference", "tool_name": "other_session_tool"}]}]}]
+        with self.assertRaisesRegex(ClientRequestError, "absent from this request"):
+            anthropic_to_chat(request)
+
     def test_responses_rejects_invalid_output_limits(self):
         for value in (0, -1, False, True, "20", 1.5):
             with self.subTest(value=value), self.assertRaises(ClientRequestError):

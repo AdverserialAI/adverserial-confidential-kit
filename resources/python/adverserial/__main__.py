@@ -20,7 +20,7 @@ from .verify import (
 
 _DEFAULT_ISSUER = "https://verify.adverserial.ai"
 _DEFAULT_AUDIENCE = "https://chat.adverserial.ai"
-_DEFAULT_MODEL = "lordx64/cyberglm"
+_DEFAULT_MODEL = "adverserial/cyberseek"
 
 _DEV_WARNING = (
     "WARNING: DEV MODE — the evidence is synthetic (dev: true). This proof\n"

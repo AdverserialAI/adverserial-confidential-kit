@@ -37,7 +37,7 @@ class CoreTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_concurrent_cold_and_expired_proofs_verify_once(self):
-        model = "lordx64/cyberglm"
+        model = "adverserial/cyberseek"
         for _ in range(3):
             barrier = threading.Barrier(16)
             proof = SimpleNamespace(model_id=model, expires_epoch=int(time.time()) + 600, dev_mode=False)
@@ -61,11 +61,11 @@ class CoreTests(unittest.TestCase):
             "adverserial_gateway.core.VerifiedSession", side_effect=ValueError("invalid session")
         ):
             with self.assertRaises(ValueError):
-                self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": []})
+                self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": []})
             release.assert_called_once_with("sk-" + "x" * 24, "signed-entitlement")
 
     def test_expired_cached_proof_is_never_reused_when_refresh_fails(self):
-        model = "lordx64/cyberglm"
+        model = "adverserial/cyberseek"
         self.dispatcher._proofs[model].proof = SimpleNamespace(model_id=model, expires_epoch=0, dev_mode=False)
         with patch("adverserial_gateway.core.verify_endpoint", side_effect=VerificationError("fixture rejection")), patch.object(self.dispatcher, "entitlement") as billing:
             with self.assertRaises(VerificationFailed):
@@ -76,21 +76,21 @@ class CoreTests(unittest.TestCase):
         for value in ("false", 1, [], {}):
             with self.subTest(value=value), patch.object(self.dispatcher, "proof_for") as proof:
                 with self.assertRaises(ClientRequestError):
-                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": value})
+                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": [], "stream": value})
                 proof.assert_not_called()
 
     def test_multiple_completions_cannot_escape_single_output_reservation(self):
         for count in (0, 2, 1000, True, "2", 1.5):
             with self.subTest(count=count), patch.object(self.dispatcher, "proof_for") as proof:
                 with self.assertRaises(ClientRequestError):
-                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "n": count})
+                    self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": [], "n": count})
                 proof.assert_not_called()
 
     def test_null_stream_is_normalized_to_false(self):
         with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
             self.dispatcher, "entitlement", return_value="signed-entitlement"
         ), patch("adverserial_gateway.core.VerifiedSession") as session:
-            self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberglm", "messages": [], "stream": None})
+            self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": [], "stream": None})
             self.assertIs(session.return_value.chat_completions.call_args.kwargs["stream"], False)
 
     def test_unknown_models_cannot_reach_the_entitlement_exchange(self):
@@ -106,10 +106,15 @@ class CoreTests(unittest.TestCase):
         request = urllib.request.Request("https://billing.example/cc/entitlements")
         self.assertIsNone(redirect.redirect_request(request, None, 302, "Found", {}, "https://other.example/"))
 
-    def test_claude_child_model_aliases_resolve_to_canonical_cyberglm(self):
-        self.assertEqual(canonical_model_id("claude-haiku-4-5-20251001"), "lordx64/cyberglm")
-        self.assertEqual(canonical_model_id("claude-sonnet-4-6"), "lordx64/cyberglm")
-        self.assertEqual(canonical_model_id("cyberglm"), "lordx64/cyberglm")
+    def test_claude_child_model_aliases_resolve_to_canonical_cyberseek(self):
+        self.assertEqual(canonical_model_id("claude-haiku-4-5-20251001"), "adverserial/cyberseek")
+        self.assertEqual(canonical_model_id("claude-sonnet-4-6"), "adverserial/cyberseek")
+        self.assertEqual(canonical_model_id("cyberseek"), "adverserial/cyberseek")
+
+    def test_legacy_models_are_request_only(self):
+        for model in ("cyberglm", "cyberkimi", "lordx64/cyberglm", "lordx64/cyberkimi"):
+            with self.assertRaisesRegex(ClientRequestError, "available only on request"):
+                canonical_model_id(model)
 
     def test_claude_alias_is_canonicalized_before_proof_entitlement_and_runtime(self):
         proof = object()
@@ -119,13 +124,13 @@ class CoreTests(unittest.TestCase):
         ) as entitlement, patch("adverserial_gateway.core.VerifiedSession") as session:
             session.return_value.chat_completions.return_value = {"id": "ok"}
             self.dispatcher.completion("sk-" + "x" * 24, payload)
-        self.assertEqual(proof_for.call_args.args[0], "lordx64/cyberglm")
-        self.assertEqual(entitlement.call_args.args[1], "lordx64/cyberglm")
-        self.assertEqual(session.return_value.chat_completions.call_args.kwargs["model"], "lordx64/cyberglm")
+        self.assertEqual(proof_for.call_args.args[0], "adverserial/cyberseek")
+        self.assertEqual(entitlement.call_args.args[1], "adverserial/cyberseek")
+        self.assertEqual(session.return_value.chat_completions.call_args.kwargs["model"], "adverserial/cyberseek")
 
     def test_gateway_replaces_api_key_with_entitlement_before_direct_call(self):
         proof = object()
-        payload = {"model": "lordx64/cyberglm", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
+        payload = {"model": "adverserial/cyberseek", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
         with patch.object(self.dispatcher, "proof_for", return_value=proof), patch.object(
             self.dispatcher, "entitlement", return_value="signed-entitlement"
         ) as entitlement, patch("adverserial_gateway.core.VerifiedSession") as session:
@@ -135,11 +140,11 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(entitlement.call_args.args[0], "sk-" + "x" * 24)
         self.assertEqual(session.call_args.kwargs["entitlement"], "signed-entitlement")
         self.assertNotEqual(session.call_args.kwargs["entitlement"], entitlement.call_args.args[0])
-        self.assertEqual(session.return_value.chat_completions.call_args.kwargs["model"], "lordx64/cyberglm")
+        self.assertEqual(session.return_value.chat_completions.call_args.kwargs["model"], "adverserial/cyberseek")
 
     def test_gateway_forwards_stream_flag_to_verified_session(self):
         proof = object()
-        payload = {"model": "lordx64/cyberglm", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12, "stream": True}
+        payload = {"model": "adverserial/cyberseek", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12, "stream": True}
         with patch.object(self.dispatcher, "proof_for", return_value=proof), patch.object(
             self.dispatcher, "entitlement", return_value="signed-entitlement"
         ), patch("adverserial_gateway.core.VerifiedSession") as session:
@@ -151,7 +156,7 @@ class CoreTests(unittest.TestCase):
     def test_modern_max_completion_tokens_is_bound_and_normalized_before_dispatch(self):
         proof = object()
         payload = {
-            "model": "lordx64/cyberglm",
+            "model": "adverserial/cyberseek",
             "messages": [{"role": "user", "content": "hello"}],
             "max_completion_tokens": 73,
         }
@@ -169,11 +174,11 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ClientRequestError):
             self.dispatcher.completion(
                 "sk-" + "x" * 24,
-                {"model": "lordx64/cyberglm", "messages": [], "max_tokens": 12, "max_completion_tokens": 13},
+                {"model": "adverserial/cyberseek", "messages": [], "max_tokens": 12, "max_completion_tokens": 13},
             )
 
     def _completion_failure(self, exc, dispatched):
-        payload = {"model": "lordx64/cyberglm", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
+        payload = {"model": "adverserial/cyberseek", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
         with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
             self.dispatcher, "entitlement", return_value="signed-entitlement"
         ), patch.object(self.dispatcher, "release_reservation") as release, patch(
@@ -209,7 +214,7 @@ class CoreTests(unittest.TestCase):
         release.assert_not_called()
 
     def test_successful_completion_never_releases(self):
-        payload = {"model": "lordx64/cyberglm", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
+        payload = {"model": "adverserial/cyberseek", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 12}
         with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
             self.dispatcher, "entitlement", return_value="signed-entitlement"
         ), patch.object(self.dispatcher, "release_reservation") as release, patch(

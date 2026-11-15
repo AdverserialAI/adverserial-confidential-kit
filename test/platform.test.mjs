@@ -71,7 +71,7 @@ test('Windows key-profile migration uses real DPAPI without the test storage ove
   const home = await fixture(t);
   const secret = 'fake-key-for-local-dpapi-regression-only';
   const path = join(home, 'ack.json');
-  await writeFile(path, JSON.stringify({ version: 1, apiKey: secret, model: 'lordx64/cyberglm', endpoint: 'https://api.adverserial.ai/v1' }));
+  await writeFile(path, JSON.stringify({ version: 1, apiKey: secret, model: 'adverserial/cyberseek', endpoint: 'https://api.adverserial.ai/v1' }));
   const env = { ...process.env, ACK_HOME: home, ACK_QUIET: '1' };
   delete env.ACK_TEST_STORAGE_KEY;
   const cli = fileURLToPath(new URL('../bin/ack.mjs', import.meta.url));
@@ -87,7 +87,7 @@ test('Codex without plugin add gets a local skill and a complete inline provider
   const home = await fixture(t);
   const binary = join(home, process.platform === 'win32' ? 'codex.cmd' : 'codex');
   await writeFile(binary, process.platform === 'win32' ? '@echo off\r\necho Commands:\r\necho   marketplace  Manage marketplaces\r\n' : '#!/bin/sh\nprintf "Commands:\\n  marketplace  Manage marketplaces\\n"\n', { mode: 0o700 });
-  const launch = await harnessCommand('codex', { apiKey: 'secret', model: 'lordx64/cyberglm' }, { ...process.env, ACK_HOME: home, CODEX_HOME: join(home, 'codex-home'), ACK_CODEX_BIN: binary });
+  const launch = await harnessCommand('codex', { apiKey: 'secret', model: 'adverserial/cyberseek' }, { ...process.env, ACK_HOME: home, CODEX_HOME: join(home, 'codex-home'), ACK_CODEX_BIN: binary });
   assert.ok(!launch.args.includes('--profile'));
   assert.ok(launch.args.includes('model_provider="adverserial_confidential"'));
   assert.match(launch.args.join(' '), /wire_api = "responses"/);

@@ -28,7 +28,7 @@ function fakeBackend(overrides = {}) {
   return {
     cwd: '~/workspace',
     preferences: async () => ({ theme: 'aurora', motion: false }),
-    snapshot: async () => ({ model: 'lordx64/cyberglm', configured: true, profiles: [], runtime: true, version: '0.2.0' }),
+    snapshot: async () => ({ model: 'adverserial/cyberseek', configured: true, profiles: [], runtime: true, version: '0.2.0' }),
     harnesses: () => [{ id: 'pi', label: 'Pi', available: true, binary: 'pi', install: 'Install Pi' }],
     savePreferences: async () => {},
     ...overrides
@@ -96,7 +96,7 @@ test('snapshot and console preferences never expose secret key data or unlock th
   const home = await mkdtemp(join(tmpdir(), 'ack-console-'));
   try {
     const secret = 'NEVER_RENDER_THIS_KEY';
-    await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 2, model: 'lordx64/cyberglm', apiKey: secret,
+    await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 2, model: 'adverserial/cyberseek', apiKey: secret,
       activeKeyProfile: 'work', apiKeyProfiles: { work: { encryptedKey: { ciphertext: secret }, mask: 'sk-••••987' } } }));
     const env = { ACK_HOME: home, HOME: home };
     const snapshot = await consoleSnapshot(env);
@@ -123,7 +123,7 @@ test('console vault actions encrypt new keys and switch/delete profiles without 
   try {
     const first = 'first-private-key-123';
     const next = 'second-private-key-456';
-    await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 1, model: 'lordx64/cyberglm', endpoint: 'https://api.adverserial.ai/v1', apiKey: first }));
+    await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 1, model: 'adverserial/cyberseek', endpoint: 'https://api.adverserial.ai/v1', apiKey: first }));
     const backend = consoleBackend({ HOME: home, ACK_HOME: home, NODE_ENV: 'test', ACK_TEST_STORAGE_KEY: Buffer.alloc(32, 9).toString('base64url') });
     await backend.saveKey('work', next, false);
     await backend.keyAction('use', 'work');

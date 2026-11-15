@@ -8,7 +8,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {startSessionGateway as realStartSessionGateway,harnessCommand} from '../lib/ack.mjs';
 const startSessionGateway=(state,env)=>realStartSessionGateway(state,env,{spawnImpl:(_command,args,options)=>spawn(process.execPath,[join(env.ACK_HOME,'gateway.cjs'),...args.slice(2)],options)});
-const state=()=>({apiKey:'sk-test-configuration-only',model:'lordx64/cyberglm',endpoint:'https://api.adverserial.ai/v1'});
+const state=()=>({apiKey:'sk-test-configuration-only',model:'adverserial/cyberseek',endpoint:'https://api.adverserial.ai/v1'});
 async function fixture(t){
  const home=await mkdtemp(join(tmpdir(),'ack-concurrent-'));t.after(()=>rm(home,{recursive:true,force:true}));
  await mkdir(join(home,'venv/bin'),{recursive:true});

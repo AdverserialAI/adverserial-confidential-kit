@@ -16,7 +16,7 @@ import { Type } from '@oh-my-pi/pi-ai';
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent';
 
 const gatewayURL = () => process.env.ADVERSERIAL_GATEWAY_URL?.trim() || 'http://127.0.0.1:8787/v1';
-const modelID = () => process.env.ADVERSERIAL_MODEL?.trim() || 'lordx64/cyberglm';
+const modelID = () => process.env.ADVERSERIAL_MODEL?.trim() || 'adverserial/cyberseek';
 const bundledVerifier = fileURLToPath(new URL('../adverserial-verify/bin/adverserial-verify.mjs', import.meta.url));
 
 type VerifierInvocation = { command: string; args: string[] } | { error: string };

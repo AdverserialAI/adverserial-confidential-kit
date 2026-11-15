@@ -6,7 +6,7 @@ Usage:
 
     proof = verify_endpoint(
         "https://host/v1",
-        expected_model_id="lordx64/cyberglm",
+        expected_model_id="adverserial/cyberseek",
         trusted_receipt_keys={kid: jwk},
         issuer="https://verify.adverserial.ai",
         audience="https://chat.adverserial.ai",

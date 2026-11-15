@@ -8,7 +8,7 @@ import test from 'node:test';
 import {runInNewContext} from 'node:vm';
 import { harnessCommand, headlessCommand, configureKimi, upsertDotenv } from '../lib/ack.mjs';
 
-const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'lordx64/cyberglm', endpoint:'https://api.adverserial.ai/v1'});
+const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'adverserial/cyberseek', endpoint:'https://api.adverserial.ai/v1'});
 async function fixture(t) {
   const home=await mkdtemp(join(tmpdir(),'ack-harness-config-'));
   t.after(()=>rm(home,{recursive:true,force:true}));
@@ -17,6 +17,7 @@ async function fixture(t) {
 test('Claude headless keeps its plugin and private status-line settings',async t=>{
  const {env}=await fixture(t); const launch=await headlessCommand('claude',state(),env,'hello');
  assert.ok(launch.args.includes('--plugin-dir')); assert.ok(launch.args.includes('-p'));
+ assert.equal(launch.env.ENABLE_TOOL_SEARCH, 'true');
  const settings=JSON.parse(launch.args[launch.args.indexOf('--settings')+1]);
  assert.match(settings.statusLine.command,/adverserial-statusline.mjs/);
  assert.ok(!launch.args.join(' ').includes(state().apiKey));

@@ -62,7 +62,7 @@ class GatewayStressTests(unittest.TestCase):
 
     def test_mixed_360_request_burst_recovers_from_bad_payloads(self):
         paths = ("/v1/chat/completions", "/v1/messages", "/v1/responses")
-        valid = {"model": "cyberglm", "messages": [{"role": "user", "content": "hello"}], "input": "hello", "max_tokens": 8}
+        valid = {"model": "cyberseek", "messages": [{"role": "user", "content": "hello"}], "input": "hello", "max_tokens": 8}
         invalid = [b"{", b"[]", b"null", b'{"stream":"false"}', b'{"temperature":NaN}', b'{"temperature":Infinity}']
         def run(index):
             if index % 3 == 0:
@@ -87,7 +87,7 @@ class GatewayStressTests(unittest.TestCase):
     def test_saturation_rejects_then_releases_all_slots(self):
         # Occupy all 16 slots with deterministic fixture work, then release it.
         self.dispatcher.gate = threading.Event()
-        payload = json.dumps({"model": "cyberglm", "messages": []})
+        payload = json.dumps({"model": "cyberseek", "messages": []})
         try:
             with ThreadPoolExecutor(max_workers=16) as pool:
                 futures = [pool.submit(self.request, "/v1/chat/completions", payload) for _ in range(16)]
@@ -115,6 +115,6 @@ class GatewayStressTests(unittest.TestCase):
         self.server.logger = logs.append
         secret = "private-fixture-credential"
         self.assertEqual(self.request("/" + secret, b"{}")[0], 404)
-        payload = {"model": "cyberglm", "input": "hello", "tools": [{"type": secret}]}
+        payload = {"model": "cyberseek", "input": "hello", "tools": [{"type": secret}]}
         self.assertEqual(self.request("/v1/responses", json.dumps(payload))[0], 400)
         self.assertNotIn(secret, "\n".join(logs))

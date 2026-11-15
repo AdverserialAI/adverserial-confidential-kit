@@ -33,8 +33,8 @@ policy identifies a live production endpoint and the independent verifier is
 available.
 
 Configure an OpenAI client with `base_url=http://127.0.0.1:8787/v1`, your
-normal Adverserial API key, and canonical model IDs only:
-`lordx64/cyberglm` or `lordx64/cyberkimi`.
+normal Adverserial API key, and the canonical model ID `adverserial/cyberseek`.
+CyberKimi and CyberGLM are available only on request.
 
 ## Supported coding-agent protocols
 
@@ -63,3 +63,17 @@ See [`../profiles/`](../profiles/) for Claude Code, Codex, OpenCode, Pi, and
 Hermes setup.
 
 Please report security vulnerabilities privately to security@adverserial.ai.
+
+### Claude MCP tool search
+
+The attested proxy has a 64-active-tool limit. ACK launches Claude Code with
+`ENABLE_TOOL_SEARCH=true`; the local Anthropic adapter honors `defer_loading`
+and hydrates schemas named by `tool_reference` blocks returned by Claude's
+local ToolSearch. All lookups are restricted to the current request's catalog.
+The gateway never executes a tool or shares discovery state between sessions.
+A catalog with more than 64 active tools is rejected locally with an actionable
+message rather than silently truncated. This requires no proxy/CVM update.
+
+After upgrading ACK, exit old Claude sessions and run `ack code claude` again.
+A live test with 80 synthetic MCP tools completed search, execution and a final
+answer through encrypted CyberSeek inference with verified receipts.
