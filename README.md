@@ -328,3 +328,7 @@ material. A separate written agreement is required as described there. See
 [LICENSING.md](LICENSING.md) for scope and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for retained dependency terms.
 Upstream coding harnesses remain separate products under their own terms.
+
+### Kimi Code configuration compatibility (0.2.13)
+
+Kimi Code may rewrite `config.toml` and move the ACK model entry outside its managed comments. ACK now replaces its reserved `adverserial_confidential` provider/model entries semantically before writing the session config, preventing duplicate TOML tables. Other provider/model, environment and default-model settings are preserved. Invalid source configuration is left unchanged with a `kimi doctor config` diagnostic; parse errors never echo configuration secrets. Each launch still uses its own private session config and loopback gateway. Restart ACK/Kimi after installing this update; the main Kimi home and history are preserved.

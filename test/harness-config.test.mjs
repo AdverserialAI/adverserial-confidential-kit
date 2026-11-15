@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import {runInNewContext} from 'node:vm';
+import { parse as parseToml } from 'smol-toml';
 import { harnessCommand, headlessCommand, configureKimi, upsertDotenv } from '../lib/ack.mjs';
 
 const state = () => ({apiKey:'sk-test-billing-secret-not-for-config', model:'adverserial/cyberseek', endpoint:'https://api.adverserial.ai/v1'});
@@ -30,6 +31,26 @@ test('fresh Kimi config has a root default and an environment credential; refres
  text=text.replace('default_model = "adverserial_confidential"','default_model = "my-existing-model"');await writeFile(path,text);
  await configureKimi(state(),env);text=await readFile(path,'utf8');assert.match(text,/^default_model = "my-existing-model"/);
  assert.equal(text.match(/BEGIN ADVERSERIAL/g).length,1);
+});
+test('Kimi rewritten reserved aliases do not create duplicate tables or change unrelated settings',async t=>{
+ const {home,env}=await fixture(t);env.KIMI_CODE_HOME=join(home,'kimi');
+ await mkdir(env.KIMI_CODE_HOME,{recursive:true});const path=join(env.KIMI_CODE_HOME,'config.toml');
+ const original=`default_model = "my-model"\n[environments.local]\nshell = "zsh"\n[providers.other]\ntype = "openai"\nbase_url = "https://example.test/v1"\n[models.other]\nprovider = "other"\nmodel = "keep-me"\n[models."adverserial_confidential"]\nprovider = "adverserial_confidential"\nmodel = "obsolete"\n# BEGIN ADVERSERIAL CONFIDENTIAL KIT (managed by ack)\n[providers.adverserial_confidential]\ntype = "openai"\nbase_url = "http://127.0.0.1:1/v1"\n# END ADVERSERIAL CONFIDENTIAL KIT\n`;
+ await writeFile(path,original);const unrelated=parseToml(original);
+ for(let i=0;i<2;i++){
+  await configureKimi(state(),env);const text=await readFile(path,'utf8');const actual=parseToml(text);
+  assert.equal(actual.default_model,'my-model');assert.deepEqual(actual.environments,unrelated.environments);
+  assert.deepEqual(actual.providers.other,unrelated.providers.other);assert.deepEqual(actual.models.other,unrelated.models.other);
+  assert.equal(actual.models.adverserial_confidential.model,'adverserial/cyberseek');
+  assert.equal(actual.providers.adverserial_confidential.base_url,'http://127.0.0.1:8765/v1');
+  assert.ok(!text.includes(state().apiKey));assert.equal((await stat(path)).mode&0o777,0o600);
+ }
+});
+test('invalid Kimi config is preserved and parse errors do not echo secrets',async t=>{
+ const {home,env}=await fixture(t);env.KIMI_CODE_HOME=join(home,'kimi');await mkdir(env.KIMI_CODE_HOME,{recursive:true});
+ const path=join(env.KIMI_CODE_HOME,'config.toml');const text='api_key = "synthetic-secret"\n[broken\n';await writeFile(path,text);
+ await assert.rejects(configureKimi(state(),env),error=>/left unchanged/.test(error.message)&&!error.message.includes('synthetic-secret'));
+ assert.equal(await readFile(path,'utf8'),text);
 });
 test('Hermes uses chat query arguments and an isolated named provider without plaintext keys',async t=>{
  const {home,env}=await fixture(t);const launch=await headlessCommand('hermes',state(),env,'hello');

@@ -6,6 +6,7 @@ it does not replace licenses attached to third-party components.
 - **EHBP:** the JavaScript `ehbp` 0.3.3 and Python `tinfoil-ehbp` 0.3.2
   reference implementations come from the [Tinfoil Encrypted HTTP Body Protocol
   project](https://github.com/tinfoilsh/encrypted-http-body-protocol) under MIT.
+- **TOML configuration:** `smol-toml` 1.9.1 is licensed under BSD-3-Clause; its license is preserved in `resources/licenses/smol-toml-BSD-3-Clause.txt`.
 - **Hardware evidence:** `@phala/dcap-qvl` 0.6.5 is licensed under Apache-2.0.
 - **JavaScript dependencies:** dependency manifests identify exact versions.
   Copies of the installed packages' license and notice files are preserved in
