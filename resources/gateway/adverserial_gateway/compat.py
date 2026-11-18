@@ -122,9 +122,12 @@ def _anthropic_messages(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
                 raise ClientRequestError("system messages cannot contain tool_result blocks")
             messages.append({"role": "system", "content": "\n".join(text_parts)})
         else:
+            # Tool results must directly follow the assistant tool_calls
+            # message; strict OpenAI-compatible servers reject a user turn
+            # in between. Any accompanying text follows as its own user turn.
+            messages.extend(tool_results)
             if text_parts:
                 messages.append({"role": "user", "content": "\n".join(text_parts)})
-            messages.extend(tool_results)
     return messages
 
 
