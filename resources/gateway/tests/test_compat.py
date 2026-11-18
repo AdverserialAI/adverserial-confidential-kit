@@ -78,6 +78,27 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(chat["messages"][1], {"role": "tool", "tool_call_id": "call_1", "content": "print('ok')"})
         self.assertEqual(chat["tools"][0]["function"]["name"], "read_file")
 
+    def test_anthropic_tool_results_directly_follow_the_tool_call(self):
+        # Claude Code sends a tool_result together with reminder text in one
+        # user message. Strict OpenAI-compatible servers reject a user turn
+        # between an assistant tool_calls message and its tool messages.
+        result = {"type": "tool_result", "tool_use_id": "toolu_call_1", "content": "loaded"}
+        reminder = {"type": "text", "text": "<system-reminder>keep it short</system-reminder>"}
+        for content in ([result, reminder], [reminder, result]):
+            with self.subTest(order=[block["type"] for block in content]):
+                chat = anthropic_to_chat({
+                    "max_tokens": 50,
+                    "tools": [{"name": "skill", "description": "load", "input_schema": {"type": "object"}}],
+                    "messages": [
+                        {"role": "user", "content": "write the report"},
+                        {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_call_1", "name": "skill", "input": {}}]},
+                        {"role": "user", "content": content},
+                    ],
+                })
+                self.assertEqual([message["role"] for message in chat["messages"]], ["user", "assistant", "tool", "user"])
+                self.assertEqual(chat["messages"][2], {"role": "tool", "tool_call_id": "call_1", "content": "loaded"})
+                self.assertEqual(chat["messages"][3]["content"], reminder["text"])
+
     def test_responses_maps_developer_and_text_content(self):
         chat = responses_to_chat({"instructions": "top", "input": [{"role": "developer", "content": [{"type": "input_text", "text": "policy"}]}, {"role": "user", "content": "hi"}], "max_output_tokens": 9})
         self.assertEqual(chat["messages"][0], {"role": "system", "content": "top"})
