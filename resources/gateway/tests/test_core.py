@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
-from adverserial import UpstreamHTTPError, VerificationError
+from adverserial import TLSPinMismatchError, UpstreamHTTPError, VerificationError
 from adverserial_gateway.config import Config
 from adverserial_gateway.core import (
     ClientRequestError,
@@ -71,6 +71,29 @@ class CoreTests(unittest.TestCase):
             with self.assertRaises(VerificationFailed):
                 self.dispatcher.completion("sk-" + "x" * 24, {"model": model, "messages": []})
             billing.assert_not_called()
+
+    def test_tls_interception_returns_actionable_failure_before_billing(self):
+        with patch("adverserial_gateway.core.verify_endpoint", side_effect=TLSPinMismatchError("wrong peer")), patch.object(
+            self.dispatcher, "entitlement"
+        ) as billing, patch("adverserial_gateway.core.VerifiedSession") as session:
+            with self.assertRaisesRegex(VerificationFailed, "HTTPS-inspect") as error:
+                self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": []})
+            self.assertEqual(error.exception.status_code, 503)
+            billing.assert_not_called()
+            session.assert_not_called()
+            self.assertIsNone(self.dispatcher._proofs["adverserial/cyberseek"].proof)
+
+    def test_tls_mismatch_before_dispatch_releases_reservation_and_returns_gateway_error(self):
+        with patch.object(self.dispatcher, "proof_for", return_value=object()), patch.object(
+            self.dispatcher, "entitlement", return_value="signed-entitlement"
+        ), patch.object(self.dispatcher, "release_reservation") as release, patch(
+            "adverserial_gateway.core.VerifiedSession"
+        ) as session:
+            session.return_value.dispatched = False
+            session.return_value.chat_completions.side_effect = TLSPinMismatchError("wrong peer")
+            with self.assertRaisesRegex(VerificationFailed, "pin mismatch"):
+                self.dispatcher.completion("sk-" + "x" * 24, {"model": "cyberseek", "messages": []})
+            release.assert_called_once_with("sk-" + "x" * 24, "signed-entitlement")
 
     def test_invalid_stream_flags_fail_before_billing(self):
         for value in ("false", 1, [], {}):

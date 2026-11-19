@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from adverserial import UpstreamHTTPError, VerificationError, VerifiedProof, VerifiedSession, verify_endpoint
+from adverserial import TLSPinMismatchError, UpstreamHTTPError, VerificationError, VerifiedProof, VerifiedSession, verify_endpoint
 
 from .config import CANONICAL_MODELS, Config
 from .hardware import verifier_from_command
@@ -30,6 +30,16 @@ class AuthorizationError(GatewayError):
 
 class VerificationFailed(GatewayError):
     status_code = 503
+
+
+def tls_verification_failure() -> VerificationFailed:
+    return VerificationFailed(
+        "TLS certificate pin mismatch: the connection does not reach the attested runtime key. "
+        "An HTTPS-inspecting antivirus or proxy can cause this. Configure a narrowly scoped "
+        "HTTPS-inspection exception for the confidential endpoint, or use a network without "
+        "TLS interception. Certificate pinning remains enforced; the request was not sent "
+        "to the inference runtime."
+    )
 
 
 class UpstreamRejected(GatewayError):
@@ -169,6 +179,8 @@ class Dispatcher:
                 expected_endpoint=expected_endpoint,
                 hardware_verifier=verifier_from_command(self.config.hardware_verifier_command),
             )
+        except TLSPinMismatchError as exc:
+            raise tls_verification_failure() from exc
         except VerificationError as exc:
             raise VerificationFailed(f"Confidential endpoint verification failed: {exc}") from exc
         if proof.dev_mode:
@@ -267,6 +279,8 @@ class Dispatcher:
             # reservation, and the caller must not blindly retry.
             if session is None or not session.dispatched:
                 self.release_reservation(api_key, entitlement)
+                if isinstance(exc, TLSPinMismatchError):
+                    raise tls_verification_failure() from exc
                 raise
             if isinstance(exc, UpstreamHTTPError):
                 rejected = UpstreamRejected(str(exc))

@@ -1,6 +1,11 @@
-# Use with: codex --profile confidential
+# Managed by ACK. Launch with: ack code codex
+# A profile alone does not start the gateway or unlock the encrypted API key.
 model = "adverserial/cyberseek"
 model_provider = "adverserial_confidential"
+web_search = "disabled"
+
+[features]
+apps = false
 
 [model_providers.adverserial_confidential]
 name = "Adverserial Confidential"
