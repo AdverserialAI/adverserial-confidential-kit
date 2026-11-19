@@ -43,7 +43,7 @@ test('Kimi rewritten reserved aliases do not create duplicate tables or change u
   assert.deepEqual(actual.providers.other,unrelated.providers.other);assert.deepEqual(actual.models.other,unrelated.models.other);
   assert.equal(actual.models.adverserial_confidential.model,'adverserial/cyberseek');
   assert.equal(actual.providers.adverserial_confidential.base_url,'http://127.0.0.1:8765/v1');
-  assert.ok(!text.includes(state().apiKey));assert.equal((await stat(path)).mode&0o777,0o600);
+  assert.ok(!text.includes(state().apiKey));if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o600);
  }
 });
 test('invalid Kimi config is preserved and parse errors do not echo secrets',async t=>{
@@ -84,6 +84,30 @@ test('Codex plugin installation honors the isolated CODEX_HOME',async t=>{
  env.ACK_CODEX_BIN=binary;env.CODEX_HOME=join(home,'isolated-codex');env.ACK_TEST_CALLS=log;
  await harnessCommand('codex',state(),env);
  assert.deepEqual((await readFile(log,'utf8')).trim().split(/\r?\n/),[env.CODEX_HOME,env.CODEX_HOME,env.CODEX_HOME]);
+});
+
+test('Codex uses its selected model catalog in both CLI overrides and the saved profile', async t => {
+ const {home,env}=await fixture(t);
+ env.ACK_CODEX_BIN=process.execPath;
+ env.CODEX_HOME=join(home,'codex with spaces');
+ const current=state();
+ const launch=await harnessCommand('codex',current,env);
+ const profile=parseToml(await readFile(join(env.CODEX_HOME,'confidential.config.toml'),'utf8'));
+ const catalog=JSON.parse(await readFile(profile.model_catalog_json,'utf8'));
+ assert.equal(catalog.models[0].slug,current.model);
+ assert.equal(catalog.models[0].display_name,'CyberSeek');
+ assert.deepEqual(catalog.models[0].input_modalities,['text']);
+ assert.equal(catalog.models[0].tool_mode,'direct');
+ assert.equal(catalog.models[0].supports_search_tool,false);
+ assert.equal(profile.model,current.model);
+ assert.equal(profile.web_search,'disabled');
+ assert.equal(profile.features.apps,false);
+ assert.equal(profile.model_providers.adverserial_confidential.base_url,'http://127.0.0.1:8765/v1');
+ const overrides=parseToml(launch.args.filter((_,i)=>i%2===1).join('\n'));
+ assert.equal(overrides.model_catalog_json,profile.model_catalog_json);
+ assert.equal(overrides.web_search,profile.web_search);
+ assert.equal(overrides.features.apps,false);
+ assert.ok(!JSON.stringify({profile,catalog,args:launch.args}).includes(current.apiKey));
 });
 
 for (const failedStage of ['marketplace', 'add']) {

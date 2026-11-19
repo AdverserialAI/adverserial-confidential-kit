@@ -81,6 +81,13 @@ not change the provider of an already-open desktop chat. Use `ack harnesses`
 to see the selected executable, or `ACK_CODEX_BIN` / `ACK_CLAUDE_BIN` (and the
 corresponding override for other harnesses) to choose a specific installation.
 
+ACK supplies a CyberSeek model catalog to Codex and saves it alongside
+`confidential.config.toml`. This avoids the unknown-model metadata warning and
+uses text input and local function tools supported by the gateway. Provider-hosted
+web search and OpenAI Apps are disabled for this provider session. Launch with
+`ack code codex` so the encrypted key and the session's live loopback port are
+provided together; the saved profile alone does not start a gateway.
+
 Windows settings default to `%USERPROFILE%/.config/adverserial` when `HOME`
 is unset; `ACK_HOME` still overrides this location. The `storage-key.dpapi`
 file contains only the Windows-protected storage key. Keep it with `ack.json`
@@ -175,6 +182,15 @@ model and policy, independent hardware evidence, and the quote-bound transport
 identity. The gateway verifies the confidential request path and signed final
 inference receipt separately. Failed, stale, unpinned or synthetic evidence is
 not a verified confidential runtime.
+
+`ack attestation` also checks the Python gateway's actual TLS connection before
+printing a verified verdict. If an antivirus HTTPS scanner or a network proxy
+replaces the server certificate, ACK reports a TLS certificate pin mismatch and
+refuses inference. Configure a narrowly scoped HTTPS-inspection exception for
+the confidential endpoint or use a connection without TLS interception. Do not
+disable certificate pinning or replace the published pins with the interceptor's
+certificate. A pin mismatch is also returned to coding clients as a structured
+gateway error instead of a disconnected request.
 
 The console badge starts unchecked and expires with the evidence. Supported
 harness interfaces expose verification as follows:
