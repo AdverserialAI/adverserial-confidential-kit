@@ -44,6 +44,8 @@ class TransportPreflightTests(unittest.TestCase):
         ), patch.object(transport, "Dispatcher") as dispatcher, contextlib.redirect_stdout(output):
             dispatcher.return_value.proof_for.side_effect = VerificationFailed("TLS certificate pin mismatch")
             self.assertEqual(transport.main(["--json"]), 1)
-        self.assertEqual(json.loads(output.getvalue()), {
-            "status": "failed", "error": "TLS certificate pin mismatch"
-        })
+        verdict = json.loads(output.getvalue())
+        self.assertEqual(verdict["status"], "failed")
+        self.assertEqual(verdict["reason"], "TLS certificate pin mismatch")
+        self.assertEqual(verdict["config"]["modelId"], "adverserial/cyberseek")
+        self.assertEqual(verdict["trust"], "pinned")
