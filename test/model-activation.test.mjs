@@ -9,11 +9,16 @@ const productionURL = 'https://verify.adverserial.ai/policies/production.json';
 const currentKeys = { current: { kty: 'EC', crv: 'P-256', x: 'current-x', y: 'current-y' } };
 const production = { status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: currentKeys };
 const models = [{ id: 'adverserial/cyberseek', policyRef: 'policies/lordx64-cyberglm.json' }];
+// Never the developer's real ACK home: unsigned fixtures neither read nor write a pin here.
+const noHome = { ACK_HOME: join(tmpdir(), `ack-activation-unused-${process.pid}`), ACK_QUIET: '1' };
 function fetchFixture(documents, requested = []) {
   return async (url) => {
     requested.push(url);
+    // These fixtures model the site before signing: no Sigstore bundles.
+    if (url.endsWith('.sigstore.json')) return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
     assert.ok(url in documents, `Unexpected policy request: ${url}`);
-    return { ok: true, json: async () => structuredClone(documents[url]) };
+    const bytes = Buffer.from(JSON.stringify(documents[url]));
+    return { ok: true, status: 200, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) };
   };
 }
 
@@ -23,12 +28,12 @@ test('model activation uses the current production policy despite a stale regist
   const apiKey = 'private-test-key-for-model-activation';
   try {
     await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 1, model: 'adverserial/cyberseek', endpoint: 'https://api.adverserial.ai/v1', apiKey }));
-    const env = { ACK_HOME: home, HOME: home, NODE_ENV: 'test', ACK_TEST_STORAGE_KEY: Buffer.alloc(32, 8).toString('base64url') };
+    const env = { ACK_HOME: home, HOME: home, ACK_QUIET: '1', NODE_ENV: 'test', ACK_TEST_STORAGE_KEY: Buffer.alloc(32, 8).toString('base64url') };
     await activateModel('adverserial/cyberseek', env, { models, fetchImpl: fetchFixture({
       [productionURL]: production,
       'https://verify.adverserial.ai/policies/lordx64-cyberglm.json': { status: 'template-not-production', model_id: 'adverserial/cyberseek', receipt_keys: { obsolete: currentKeys.current } }
     }, requested) });
-    assert.deepEqual(requested, [productionURL]);
+    assert.deepEqual(requested, [productionURL, `${productionURL}.sigstore.json`]);
     const stateText = await readFile(join(home, 'ack.json'), 'utf8');
     const state = JSON.parse(stateText);
     assert.equal(state.model, production.model_id);
@@ -46,16 +51,16 @@ test('a different model still needs its own active matching policy and receipt k
     production,
     { ...production, model_id: other.id, receipt_keys: {} }
   ]) {
-    await assert.rejects(() => publishedModelPolicy(other.id, { models: [other], fetchImpl: fetchFixture({ [productionURL]: production, [otherURL]: invalid }) }), /complete active/);
+    await assert.rejects(() => publishedModelPolicy(other.id, { env: noHome, models: [other], fetchImpl: fetchFixture({ [productionURL]: production, [otherURL]: invalid }) }), /complete active/);
   }
   const active = { ...production, model_id: other.id };
-  const result = await publishedModelPolicy(other.id, { models: [other], fetchImpl: fetchFixture({ [productionURL]: production, [otherURL]: active }) });
+  const result = await publishedModelPolicy(other.id, { env: noHome, models: [other], fetchImpl: fetchFixture({ [productionURL]: production, [otherURL]: active }) });
   assert.equal(result.policy.model_id, other.id);
   assert.equal(result.url, otherURL);
 });
 
 test('inactive or unpinned production policy cannot activate the production model', async () => {
   for (const invalid of [{ ...production, status: 'revoked' }, { ...production, receipt_keys: {} }]) {
-    await assert.rejects(() => publishedModelPolicy(production.model_id, { models, fetchImpl: fetchFixture({ [productionURL]: invalid }) }), /incomplete/);
+    await assert.rejects(() => publishedModelPolicy(production.model_id, { env: noHome, models, fetchImpl: fetchFixture({ [productionURL]: invalid }) }), /incomplete/);
   }
 });

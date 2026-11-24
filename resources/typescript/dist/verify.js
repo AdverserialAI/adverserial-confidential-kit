@@ -78,6 +78,43 @@ const endpointURL = (raw, label) => {
     }
     return parsed;
 };
+const PRODUCTION_POLICY_URL = 'https://verify.adverserial.ai/policies/production.json';
+// Grace release only: a runtime with no policy-signature verifier (a browser
+// page that did not supply `policyProvider`) still loads the policy over HTTPS
+// and says so. Set to false in the release that enforces policy transparency.
+const ALLOW_UNSIGNED_POLICY_WITHOUT_VERIFIER = true;
+/**
+ * The production policy is used only after its Sigstore bundle has been
+ * checked: signature over the served bytes, transparency-log inclusion, the
+ * publishing workflow identity, and no rollback.
+ *   - `options.policyProvider(url)` does that check when supplied (browser).
+ *   - Under Node the kit's verifier (lib/policy-transparency.mjs) does it.
+ */
+const loadProductionPolicy = async (options, fetchImpl) => {
+    if (options.policyProvider)
+        return options.policyProvider(PRODUCTION_POLICY_URL);
+    if (typeof process !== 'undefined' && process.versions?.node) {
+        // Computed specifier: browser bundlers must not follow it.
+        const specifier = new URL('../../../lib/policy-transparency.mjs', import.meta.url).href;
+        const { fetchSignedPolicy, defaultStateDir, transparencyMode } = await import(specifier);
+        const published = await fetchSignedPolicy({
+            url: PRODUCTION_POLICY_URL,
+            fetchImpl,
+            stateDir: defaultStateDir(process.env),
+            mode: transparencyMode(process.env)
+        });
+        for (const warning of published.warnings)
+            console.warn(`adverserial: ${warning}`);
+        return published.policy;
+    }
+    if (!ALLOW_UNSIGNED_POLICY_WITHOUT_VERIFIER)
+        throw new Error('No policy signature verifier is configured; refusing an unsigned production policy.');
+    console.warn('adverserial: the production policy signature was NOT checked (no verifier in this runtime).');
+    const response = await fetchImpl(PRODUCTION_POLICY_URL, { credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    if (!response.ok)
+        throw new Error('The approved production policy is unavailable.');
+    return response.json();
+};
 /**
  * Verify the attestation of the endpoint behind `baseURL` (e.g.
  * "https://host/v1"). Never rejects: failures return { status: 'failed' }.
@@ -116,10 +153,7 @@ export const verifyEndpoint = async (baseURL, options) => {
         const { claims, keyId } = await verifyReceiptSignature(receipt, options.trustedReceiptKeys);
         let policy = options.expectedPolicy ? validateRuntimePolicy(options.expectedPolicy, options.expectedModelId) : undefined;
         if (!policy && endpoint.origin === 'https://api.adverserial.ai') {
-            const response = await fetchImpl('https://verify.adverserial.ai/policies/production.json', { credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(15000) });
-            if (!response.ok)
-                throw new Error('The approved production policy is unavailable.');
-            policy = validateRuntimePolicy(await response.json(), options.expectedModelId);
+            policy = validateRuntimePolicy(await loadProductionPolicy(options, fetchImpl), options.expectedModelId);
         }
         if (policy)
             checkWorkloadPolicy(policy, evidence, claims, keyId);

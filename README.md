@@ -4,7 +4,7 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.14-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.15-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-Keychain_%7C_Windows_DPAPI-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
@@ -63,7 +63,10 @@ without waiting for that release.
 
 - **macOS or Windows** for encrypted key storage through Keychain or Windows
   DPAPI (bound to your Windows account). Linux credential storage is not yet implemented.
-- **Node.js 18+**, npm and **Python 3.10+** on PATH.
+- **Node.js 18+**, npm and **Python 3.10+** on PATH. Checking the policy's
+  transparency signature needs **Node.js 22.22.2+, 24.15+ or 26+**; on older
+  Node the check is skipped with a warning in this release, and a later
+  release that enforces signatures will require one of those versions.
 - An Adverserial API key with access to a currently published confidential model.
 - The official CLI for each harness you want to use. ACK detects installed
   binaries and reports missing ones; it does not install every agent for you.
@@ -177,6 +180,79 @@ model and policy, independent hardware evidence, and the quote-bound transport
 identity. The gateway verifies the confidential request path and signed final
 inference receipt separately. Failed, stale, unpinned or synthetic evidence is
 not a verified confidential runtime.
+
+### Policy transparency
+
+The verification policy tells ACK which deployment to accept, so whoever can
+change the policy can change what "verified" means. Until now ACK took the
+policy from `https://verify.adverserial.ai/policies/production.json` on HTTPS
+trust alone. From 0.2.15 ACK also checks that the exact bytes it received were
+
+1. **signed by the publishing workflow**: a Sigstore certificate issued to
+   `https://github.com/AdverserialAI/confidential-policy/.github/workflows/sign-policy.yml@refs/heads/main`
+   by `https://token.actions.githubusercontent.com`, for a `push` to `main` of
+   that repository (the repository and organization are also matched by their
+   numeric GitHub ids);
+2. **recorded in the public Rekor transparency log**, with an inclusion proof
+   in the signature bundle served next to the policy
+   (`production.json.sigstore.json`); and
+3. **not older than a policy this installation already accepted**, ordered by
+   the log's own time, which the signer cannot choose. Each release also
+   carries a floor, so a fresh installation cannot be handed an old policy.
+
+The check is offline, against the Sigstore trusted root shipped in
+`resources/sigstore/trusted_root.json`. There is no signing key: nobody,
+including Adverserial, can publish a policy that ACK accepts as signed without
+leaving a permanent public log entry under that one identity.
+
+```sh
+ack policy            # status: signed / unsigned / unverifiable, signer, log index, integrated time
+ack doctor            # includes a "Policy transparency" line
+ack attestation       # prints the same line before evaluating hardware evidence
+ack policy enforce    # refuse a policy that is not signed and logged (opt in now)
+ack policy warn       # back to the default of this release
+```
+
+| Status | Meaning |
+|---|---|
+| `signed` | Signature, log inclusion, signer identity and rollback check all passed |
+| `unsigned` | No signature bundle is published next to the policy |
+| `unverifiable` | A bundle exists but was not accepted (wrong signer, bad signature, older than the accepted policy), or this Node.js is too old to run the verifier |
+
+**This release only warns.** In the default `warn` mode ACK verifies whenever
+a bundle is published and tells you the result, but an unsigned or
+unverifiable policy is still used, exactly as before 0.2.15. Set
+`ACK_POLICY_TRANSPARENCY=enforce`, or run `ack policy enforce`, to refuse it
+today. A later release will enforce by default and will then require Node.js
+22.22.2+, 24.15+ or 26+.
+
+What it does not prove: that a policy is *right*. Whoever can merge to `main`
+of the policy repository and approve its signing environment can sign a policy
+for a different deployment. Signing makes that public and attributable, not
+impossible, so it only helps if the log is watched; the
+[transparency repository](https://github.com/AdverserialAI/cyberseek-transparency)
+runs a monitor and anyone can run their own. Verify a policy by hand:
+
+```sh
+curl -sSO https://verify.adverserial.ai/policies/production.json
+curl -sSO https://verify.adverserial.ai/policies/production.json.sigstore.json
+cosign verify-blob --bundle production.json.sigstore.json \
+  --certificate-identity https://github.com/AdverserialAI/confidential-policy/.github/workflows/sign-policy.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-trigger push production.json
+```
+
+Decisions in this release that can still be revisited before enforcement: the
+signing identity above (it becomes permanent once clients enforce), rollback
+order by log time plus a per-release floor, and the Node verifier as the single
+enforcement point. `ack`, the hardware verifier that the gateway runs for
+every verification, and the bundled TypeScript SDK under Node all use
+`lib/policy-transparency.mjs`. The Python SDK has the same check as an optional
+extra (`pip install 'adverserial[transparency]'`, Python 3.11+, pinned to
+`sigstore==4.6.0`) for standalone use; it verifies offline against the same
+shipped trusted root, and CI runs its tests on Linux, macOS and Windows. The verifier copies bundled inside the harness plugins do not check the
+signature yet; in an `ack` session the policy they compare against has
+already been checked by `ack` and the hardware verifier.
 
 ### What ACK verifies and what it does not
 
@@ -477,3 +553,6 @@ The service now generates its receipt, meter, TLS and EHBP keys inside the encla
 
 Every forwarded request now carries a `cache_salt`: 32 random bytes (unpadded base64url) created per gateway process, which is one `ack code` session or swarm. It separates that session's prefix cache inside the enclave and contains no user data. A client-supplied `cache_salt` matching `^[A-Za-z0-9_-]{32,128}$` is kept by the gateway; a malformed one is replaced; a client `extra_key` is removed because the proxy rejects it. The proxy never passes the salt to the model server as sent: it always replaces it with an HMAC, keyed per boot, over the billing-signed account id and that salt, so accounts cannot share cache entries whatever salt they send. The salt is counted in the entitlement's input bound. No measurement, OS-image, KMS or key value is compiled into ACK: they come from the published policy.
 
+### Policy transparency (0.2.15)
+
+ACK now checks that the published verification policy is signed by the policy repository's GitHub Actions workflow and recorded in the public Sigstore transparency log, and that it is not older than a policy already accepted. This release reports the result (`ack policy`, `ack doctor`, `ack attestation`) and never blocks; `ack policy enforce` opts in to refusing unsigned policies. See [Policy transparency](#policy-transparency).

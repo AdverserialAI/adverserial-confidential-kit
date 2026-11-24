@@ -11,9 +11,18 @@ requires-python = ">=3.10"
 license = { text = "Proprietary" }
 dependencies = ["cryptography>=41", "tinfoil-ehbp==0.3.2"]
 
+[project.optional-dependencies]
+# Policy transparency (adverserial.policy_transparency). sigstore needs
+# Python 3.11+, so it is an extra rather than a hard dependency of the 3.10 SDK.
+# Pinned exactly: this is verification code, and tests run against this version.
+transparency = ["sigstore==4.6.0; python_version >= '3.11'"]
+
 [project.scripts]
 adverserial-verify = "adverserial.__main__:main"
 adverserial-hardware-verify = "adverserial.hardware_verifier:main"
+
+[tool.setuptools.package-data]
+adverserial = ["sigstore_trusted_root.json"]
 
 [tool.setuptools.packages.find]
 include = ["adverserial*"]

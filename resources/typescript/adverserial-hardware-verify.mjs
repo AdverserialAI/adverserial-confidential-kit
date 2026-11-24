@@ -55,9 +55,16 @@ if (!Number.isInteger(minimumGPUCount) || minimumGPUCount < 1) fail('ADVERSERIAL
 try {
 	let policy;
   if ((input.expectedEndpoint ?? input.endpoint) === 'https://api.adverserial.ai') {
-    const response = await fetch('https://verify.adverserial.ai/policies/production.json', {cache:'no-store',signal:AbortSignal.timeout(15000)});
-    if (!response.ok) fail('Published runtime policy unavailable');
-    policy = validateRuntimePolicy(await response.json(), input.expectedModelId ?? input.model);
+    // Signature, transparency-log inclusion, publishing identity and rollback
+    // are checked before the policy is used (lib/policy-transparency.mjs).
+    const { fetchSignedPolicy, defaultStateDir, transparencyMode } = await import('../../lib/policy-transparency.mjs');
+    const published = await fetchSignedPolicy({
+      url: 'https://verify.adverserial.ai/policies/production.json',
+      stateDir: defaultStateDir(process.env),
+      mode: transparencyMode(process.env)
+    });
+    for (const warning of published.warnings) process.stderr.write(`adverserial-hardware-verify: warning: ${warning}\n`);
+    policy = validateRuntimePolicy(published.policy, input.expectedModelId ?? input.model);
     const w = input.evidence?.workload;
     if (w?.compose_digest !== policy.deployment_configuration_digest || w?.proxy_version !== policy.proxy_version || w?.model_digest !== policy.model_artifact_digest || input.evidence?.tls_spki_sha256 !== policy.tls_spki_sha256) fail('Hardware evidence workload does not match approved policy');
   }

@@ -101,8 +101,8 @@ class GatewayStressTests(unittest.TestCase):
                 try:
                     status, _ = self.request("/v1/chat/completions", payload)
                     self.assertEqual(status, 503)
-                except (ConnectionResetError, ConnectionAbortedError, http.client.RemoteDisconnected):
-                    pass  # A full server may close before sending its 503.
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, http.client.RemoteDisconnected):
+                    pass  # A full server may close before sending its 503, or while the request is still being written.
                 finally:
                     self.dispatcher.gate.set()
                 self.assertTrue(all(f.result()[0] == 200 for f in futures))
