@@ -9,7 +9,14 @@
  *
  * Uses the SDK's built-in Phala TDX verifier (@phala/dcap-qvl against Intel
  * collateral) and the NVIDIA NRAS detached-EAT bundle verifier (NVIDIA's
- * public JWKS). ADVERSERIAL_MIN_GPU_COUNT overrides the default minimum of 8.
+ * public JWKS). ADVERSERIAL_MIN_GPU_COUNT overrides the default minimum of 8
+ * for non-production endpoints; for https://api.adverserial.ai the minimum and
+ * all TDX measurements come from the published policy.
+ *
+ * The policy is fetched over HTTPS from verify.adverserial.ai and is not
+ * signed. The TDX TCB status must be UpToDate. Not verified here: the
+ * /.well-known/adverserial-key-attestation statement, and any binding between
+ * the NVIDIA evidence nonce and the TDX quote.
  */
 let createPhalaNVIDIAVerifier, validateRuntimePolicy;
 try {

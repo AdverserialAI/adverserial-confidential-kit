@@ -27,7 +27,8 @@ from adverserial import (
 from .config import CANONICAL_MODELS, Config, ConfigError, load_receipt_keys
 
 # Accepted by the attested proxy for the optional per-request prefix-cache
-# salt. Anything else is answered with HTTP 400 by the enclave.
+# salt (32-128 characters). Anything else is answered with HTTP 400 by the
+# enclave.
 _CACHE_SALT = re.compile(r"[A-Za-z0-9_-]{32,128}")
 # A proof this young was verified after any reboot that could explain a
 # pre-generation rejection, so re-attesting again would only add latency.
@@ -183,9 +184,11 @@ class Dispatcher:
         self._billing_opener = _direct_billing_opener()
         # One gateway process serves one `ack code` session or swarm and keeps
         # no conversation state, so the process lifetime is the session. The
-        # salt partitions the enclave's prefix cache per session (inside the
-        # per-tenant key the enclave derives itself); it is random, carries no
-        # user data, is never logged, and is not written to disk.
+        # salt partitions the enclave's prefix cache per session. The proxy
+        # never forwards it as sent: it replaces it with an HMAC, keyed per
+        # boot, over the billing-signed account id and this salt, so accounts
+        # cannot share cache entries. The salt is random, carries no user
+        # data, is never logged, and is not written to disk.
         self._cache_salt = new_cache_salt()
         self._receipt_keys = dict(config.receipt_keys)
         self._receipt_keys_stamp = self._receipt_keys_file_stamp()

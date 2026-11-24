@@ -15,6 +15,12 @@ src/lib/confidential/verification.ts, plus a TLS channel-binding check):
 6. Check the TLS peer certificate of the attestation connection against the
    evidence's tls_spki_sha256 (the browser cannot do this; Python can, and
    must, because it is what binds the receipt to the live TLS endpoint).
+7. For the production endpoint, compare the evidence and receipt with the
+   policy published at verify.adverserial.ai. That policy is fetched over
+   HTTPS and is not signed; trusted_receipt_keys is the only local pin.
+8. Hand the raw evidence to the caller's hardware_verifier. This module does
+   not parse the TDX quote, replay the event log or verify GPU tokens itself,
+   and it does not fetch /.well-known/adverserial-key-attestation.
 
 The returned proof carries everything VerifiedSession needs to pin subsequent
 API calls to the attested TLS public key.
@@ -159,7 +165,8 @@ class VerifiedProof:
     receipt_jwk: Optional[Dict[str, Any]] = None
     # Name/version of the independent verifier that accepted raw evidence.
     hardware_verifier: Optional[str] = None
-    # RFC 9458 EHBP receiver configuration, validated from attested evidence.
+    # EHBP (HPKE, RFC 9180) receiver configuration, validated from attested
+    # evidence. The enclave generates this key afresh at every boot.
     # When present, VerifiedSession uses the reference EHBP transport rather
     # than allowing a plaintext request-body fallback.
     ehbp_key_config: Optional[bytes] = None
@@ -183,8 +190,9 @@ def fetch_attestation(
     """GET the attestation endpoint; return (payload, peer certificate DER).
 
     Exported for the CLI's --trust-evidence-key bootstrap. The TLS peer is NOT
-    CA-validated here (the proxy serves a self-signed cert by design); callers
-    authenticate it via the evidence's tls_spki_sha256 instead.
+    CA-validated here (trust comes from the quote-bound key, whether the
+    certificate is ACME-issued or self-signed); callers authenticate it via
+    the evidence's tls_spki_sha256 instead.
     """
     parts = urlsplit(attestation_url)
     if parts.scheme != "https" or not parts.hostname:

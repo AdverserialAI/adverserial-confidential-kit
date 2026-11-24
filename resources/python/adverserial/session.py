@@ -16,7 +16,9 @@ when present: signature against the proof's receipt key, nonce echo,
 request/response hashes against the exact bytes sent/received, model, policy,
 issuer/audience, expiry, and the attestation binding's TLS SPKI. A receipt
 that fails any check raises VerificationError — the exchange is not to be
-trusted. A missing receipt is reported as receipt_verified=False.
+trusted. A missing receipt raises VerificationError unless the session was
+created with require_receipts=False (refused for EHBP-attested endpoints), in
+which case it is reported as receipt_verified=False.
 
 Stream hashing rule (must match the proxy): for every upstream `data:` line,
 strip the trailing CR, drop "data:" and ONE leading space, and feed the
