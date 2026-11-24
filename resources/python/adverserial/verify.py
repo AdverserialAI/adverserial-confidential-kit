@@ -43,6 +43,7 @@ from ._tls import TLSPinMismatchError, attestation_ssl_context, spki_sha256_from
 __all__ = [
     "HardwareEvidenceVerifier",
     "HardwareVerification",
+    "ReceiptKeyNotPinnedError",
     "VerifiedProof",
     "VerificationError",
     "verify_endpoint",
@@ -53,6 +54,59 @@ _FUTURE_IAT_LEEWAY_SECONDS = 60
 
 class VerificationError(Exception):
     """The endpoint's attestation could not be verified."""
+
+
+class ReceiptKeyNotPinnedError(VerificationError):
+    """The attestation receipt is signed by a key this client has not pinned.
+
+    This is what a client sees after the service rotates its receipt-signing
+    key. It is never accepted automatically: the pin is the local trust
+    anchor, and only an explicit re-pin (``ack upgrade``) may replace it.
+    """
+
+
+_PRODUCTION_HOST = "api.adverserial.ai"
+_PRODUCTION_POLICY_URL = "https://verify.adverserial.ai/policies/production.json"
+
+
+def _load_published_policy(timeout: float) -> Dict[str, Any]:
+    request = urllib.request.Request(
+        _PRODUCTION_POLICY_URL,
+        headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        policy = json.load(response)
+    if not isinstance(policy, dict):
+        raise ValueError("the published policy is not a JSON object")
+    return policy
+
+
+def _unpinned_receipt_key_message(key_id: str, policy: Optional[Mapping[str, Any]]) -> str:
+    """Explain an unknown receipt signer without ever trusting it.
+
+    The published policy is consulted only to choose the wording; the receipt
+    stays rejected until the user re-pins.
+    """
+    short = key_id if len(key_id) <= 16 else key_id[:16] + "…"
+    published = policy.get("receipt_keys") if isinstance(policy, Mapping) else None
+    if isinstance(published, Mapping) and key_id in published:
+        return (
+            f"the service rotated its keys: the attestation receipt is signed by key {short}, "
+            "which the published policy lists but this machine has not pinned. "
+            "Run `ack upgrade` to re-pin the published policy, then start a new coding session"
+        )
+    if isinstance(published, Mapping):
+        return (
+            f"the attestation receipt is signed by key {short}, which is neither pinned on this "
+            "machine nor listed in the published policy. If the service is rotating its keys, "
+            "wait for the new policy to be published and run `ack upgrade`; otherwise do not "
+            "trust this endpoint"
+        )
+    return (
+        f"the attestation receipt is signed by key {short}, which is not pinned on this machine. "
+        "The service has probably rotated its keys: run `ack upgrade` to re-pin the published "
+        "policy, then start a new coding session"
+    )
 
 
 @dataclass(frozen=True)
@@ -220,20 +274,28 @@ def verify_endpoint(
     key_id = header.get("kid")
     pinned_jwk = trusted_receipt_keys.get(key_id) if isinstance(key_id, str) else None
     _expect(
-        header.get("alg") == "ES256" and isinstance(key_id, str) and pinned_jwk is not None,
+        header.get("alg") == "ES256" and isinstance(key_id, str) and bool(key_id),
         "the receipt is not signed by a configured ES256 verification key",
     )
+    policy = expected_policy
+    production = urlsplit(base_url).hostname == _PRODUCTION_HOST
+    if pinned_jwk is None:
+        # Unknown signer: almost always a server-side key rotation. Fail
+        # closed, but say so plainly instead of reporting a bad signature.
+        if policy is None and production:
+            try:
+                policy = _load_published_policy(timeout)
+            except Exception:
+                policy = None
+        raise ReceiptKeyNotPinnedError(_unpinned_receipt_key_message(key_id, policy))
     try:
         verify_es256(pinned_jwk, signing_input, signature)  # type: ignore[arg-type]
     except (InvalidSignature, ValueError) as exc:
         raise VerificationError("the verification receipt signature is invalid") from exc
 
-    policy = expected_policy
-    if policy is None and urlsplit(base_url).hostname == "api.adverserial.ai":
+    if policy is None and production:
         try:
-            request = urllib.request.Request("https://verify.adverserial.ai/policies/production.json", headers={"Accept": "application/json", "Cache-Control": "no-cache"})
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                policy = json.load(response)
+            policy = _load_published_policy(timeout)
         except Exception as exc:
             raise VerificationError("the approved runtime policy could not be loaded") from exc
     if policy is not None:
@@ -250,7 +312,11 @@ def verify_endpoint(
         for actual, expected, name in comparisons:
             _expect(isinstance(expected, str) and bool(expected) and actual == expected, f"the {name} does not match approved policy")
         policy_key = (policy.get("receipt_keys") or {}).get(key_id) or {}
-        _expect(all(policy_key.get(k) == pinned_jwk.get(k) for k in ("kty", "crv", "x", "y")), "the receipt key does not match approved policy")
+        _expect(
+            all(policy_key.get(k) == pinned_jwk.get(k) for k in ("kty", "crv", "x", "y")),
+            "the pinned receipt key is no longer in the published policy (the service rotated or "
+            "retired it). Run `ack upgrade` to re-pin the published policy, then start a new coding session",
+        )
 
     # --- claims ------------------------------------------------------------
     iat, exp = claims.get("iat"), claims.get("exp")

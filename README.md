@@ -275,6 +275,34 @@ ack upgrade
 `ack upgrade` refreshes runtime files and policy; it does not replace the globally
 installed npm package.
 
+### When the service rotates its keys
+
+ACK pins the service's receipt-signing keys locally (`receipt-keys.json`, taken
+from the published policy by `ack init` and `ack upgrade`). The TLS key, the TDX
+measurements, the OS image, the application and the deployment configuration are
+not stored locally: every verification compares fresh evidence with the policy
+published at that moment. The encrypted-transport (EHBP) key is never pinned; it
+is accepted only from a fresh, quote-bound attestation.
+
+If the service rebuilds its enclave with new keys, verification fails closed with
+`The service rotated its keys … Run ack upgrade`. To recover:
+
+```sh
+ack upgrade        # re-pins the receipt keys from the published policy
+ack attestation    # should report verified
+```
+
+Then start a new `ack code` session. A gateway that is already running picks up
+the new pins on its next request, but a harness's own verification command and
+badge keep the pins they started with until that session is restarted.
+`ack doctor` reports `Receipt-key pins … Out of date` when the published policy
+no longer matches the local pins. ACK never re-pins by itself.
+
+An enclave restart alone needs no action. The gateway notices that the enclave no
+longer accepts the keys in its cached proof, verifies the endpoint again in full
+and retries the request once — but only when the first attempt provably did not
+run. A request that may already be generating is never repeated.
+
 ## Confidential swarms
 
 Choose workers in the console or run:
@@ -332,3 +360,10 @@ Upstream coding harnesses remain separate products under their own terms.
 ### Kimi Code configuration compatibility (0.2.13)
 
 Kimi Code may rewrite `config.toml` and move the ACK model entry outside its managed comments. ACK now replaces its reserved `adverserial_confidential` provider/model entries semantically before writing the session config, preventing duplicate TOML tables. Other provider/model, environment and default-model settings are preserved. Invalid source configuration is left unchanged with a `kimi doctor config` diagnostic; parse errors never echo configuration secrets. Each launch still uses its own private session config and loopback gateway. Restart ACK/Kimi after installing this update; the main Kimi home and history are preserved.
+
+### Server key rotation and per-session cache salt (0.2.14)
+
+The service now generates its receipt, TLS and EHBP keys inside the enclave and runs on a new OS image, so its published policy changed. After the rotation run `ack upgrade`, then start a new coding session; a receipt-key mismatch now says exactly that instead of reporting an unconfigured key, and `ack doctor` compares the local pins with the published policy. A long-running gateway re-reads re-pinned keys, and after an enclave restart it re-verifies the endpoint and retries once when the request provably did not run (stale EHBP or TLS key). Nothing about verification is relaxed: no key is taken from a failed exchange and ACK never re-pins on its own.
+
+Every forwarded request now carries a `cache_salt`: 32 random bytes (unpadded base64url) created per gateway process, which is one `ack code` session or swarm. It separates that session's prefix cache inside the enclave and contains no user data. A client-supplied `cache_salt` matching `^[A-Za-z0-9_-]{32,128}$` is kept; a malformed one is replaced; a client `extra_key` is removed. The salt is counted in the entitlement's input bound. No measurement, OS-image, KMS or key value is compiled into ACK: they come from the published policy.
+

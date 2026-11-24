@@ -7,5 +7,5 @@ export type TDXReport = {
     rtMr3: Uint8Array;
     tdAttributes: Uint8Array;
 };
-/** dstack v0.5.x event-log V1. See cc-eventlog/src/runtime_events.rs at v0.5.9. */
+/** dstack v0.5.x event-log V1. See cc-eventlog/src/runtime_events.rs (identical at v0.5.9 and v0.5.15). All pinned values come from the published policy. */
 export declare const verifyTDXWorkload: (report: TDXReport, eventLog: unknown, policy?: TDXPolicy) => Promise<void>;

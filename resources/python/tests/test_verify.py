@@ -148,7 +148,7 @@ class VerifyTests(unittest.TestCase):
 
     def test_untrusted_key_rejected(self):
         with FakeAttestProxy() as fake, FakeAttestProxy() as stranger:
-            with self.assertRaisesRegex(VerificationError, "configured ES256"):
+            with self.assertRaisesRegex(VerificationError, "not pinned on this machine.*rotated its keys.*`ack upgrade`"):
                 self.verify(fake, trusted_receipt_keys=stranger.trusted_keys)
 
     def test_nonce_mismatch_rejected(self):

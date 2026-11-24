@@ -93,6 +93,17 @@ Receipt claims: `v:1`, `iss`, `aud`, `request_nonce`, `request_body_hash`,
 `exp` (iat+120 s), and `usage {input_tokens, cached_tokens, output_tokens}`
 when the runtime reported usage.
 
+## Key rotation and enclave restarts
+
+`verify_endpoint` raises `ReceiptKeyNotPinnedError` (a `VerificationError`) when
+the attestation receipt is signed by a key that is not in `trusted_receipt_keys`
+— what a client sees after the service rotates its receipt key. The message says
+to re-pin from the published policy (`ack upgrade`); the SDK never adopts the
+new key itself. `VerifiedSession` raises `EHBPKeyMismatchError` (an
+`UpstreamHTTPError`, status 422) when the enclave reports that the request was
+sealed to an EHBP key it no longer holds. Call `verify_endpoint` again to obtain
+the current quote-bound key before retrying.
+
 ## Tests
 
 ```sh

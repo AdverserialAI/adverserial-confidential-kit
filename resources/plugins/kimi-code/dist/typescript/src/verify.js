@@ -44,8 +44,11 @@ const verifyReceiptSignature = async (receipt, trustedReceiptKeys) => {
     const { header, claims, signingInput, signature } = readCompactJws(receipt);
     const algorithm = asNonEmptyString(header.alg);
     const keyId = asNonEmptyString(header.kid);
-    if (algorithm !== 'ES256' || !keyId || !trustedReceiptKeys[keyId]) {
+    if (algorithm !== 'ES256' || !keyId) {
         throw new Error('The receipt is not signed by a configured ES256 verification key.');
+    }
+    if (!Object.hasOwn(trustedReceiptKeys, keyId)) {
+        throw new Error('The service rotated its keys: the receipt is signed by a key that is not pinned on this machine. Run `ack upgrade` to re-pin the published policy, then start a new coding session.');
     }
     const key = await crypto.subtle.importKey('jwk', trustedReceiptKeys[keyId], { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     const signatureValid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, asArrayBuffer(fromBase64Url(signature)), new TextEncoder().encode(signingInput));

@@ -59,6 +59,45 @@ conversation state are rejected deliberately. The caller must resend complete
 text and function-call history; this avoids keeping prompt history at the
 provider.
 
+## Prefix-cache salt
+
+Each gateway process creates one random 32-byte `cache_salt` (unpadded
+base64url) and adds it to every request it forwards, for all three local
+protocols. The gateway keeps no conversation state, so the salt is stable for
+the life of the process — one `ack code` session or swarm — and separates that
+session's prefix cache inside the enclave, within the per-tenant key the enclave
+derives itself. It is random, never logged and never written to disk.
+
+- A client `cache_salt` matching `^[A-Za-z0-9_-]{32,128}$` is forwarded unchanged.
+- Any other `cache_salt` value is replaced with the session salt (the enclave
+  answers a malformed salt with HTTP 400).
+- A client `extra_key` is removed; the enclave rejects it.
+- The salt is part of the body the entitlement's input bound is computed from
+  (`2 × bytes + 4096`).
+
+## Enclave restarts and key rotation
+
+The enclave generates a new EHBP key at every boot. A cached proof is dropped and
+the endpoint is verified again from scratch — attestation, published policy,
+pinned receipt key and hardware evidence — when:
+
+- the TLS handshake presents a different key, the endpoint is unreachable, or the
+  proof cannot be used (nothing was sent);
+- the enclave answers with the EHBP key-configuration problem document
+  (`422 application/problem+json`, type `urn:ietf:params:ehbp:error:key-config`);
+- the enclave rejects the request with 400, 401, 403 or 422 before generating
+  and the cached proof is at least 30 seconds old.
+
+The request is then retried exactly once, and only if nothing was sent or the
+newly verified proof carries a different EHBP key (so the enclave cannot have
+opened the first attempt). 5xx responses, timeouts, broken streams and receipt failures
+are never retried: the request may have run. No key is ever taken from an error
+response.
+
+The pinned receipt keys are re-read when `ADVERSERIAL_RECEIPT_KEYS_FILE` changes,
+so `ack upgrade` reaches a running gateway. A missing or malformed file leaves
+the loaded pins untouched.
+
 See [`../profiles/`](../profiles/) for Claude Code, Codex, OpenCode, Pi, and
 Hermes setup.
 

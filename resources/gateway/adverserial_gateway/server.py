@@ -485,6 +485,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(model, str):
                     raise ClientRequestError("model is required")
                 chat = anthropic_to_chat(payload); chat["stream"] = streaming
+                carry_cache_salt(payload, chat)
                 result = self.dispatcher.adapted_completion(api_key, model, chat)
                 if streaming: return self._stream_anthropic(result, model)
                 self._json(HTTPStatus.OK, chat_to_anthropic(dict(result), model))
@@ -493,6 +494,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(model, str):
                     raise ClientRequestError("model is required")
                 chat = responses_to_chat(payload); chat["stream"] = streaming
+                carry_cache_salt(payload, chat)
                 result = self.dispatcher.adapted_completion(api_key, model, chat)
                 if streaming: return self._stream_responses(result, model)
                 self._json(HTTPStatus.OK, chat_to_response(dict(result), model))
@@ -506,6 +508,17 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, TypeError, RecursionError) as exc:
             log(f"[gateway] POST {path} -> 400 {type(exc).__name__}")
             self._json(HTTPStatus.BAD_REQUEST, {"error": {"message": str(exc)}}, close=True)
+
+
+def carry_cache_salt(source: dict, chat: dict) -> None:
+    """Keep a client-chosen prefix-cache salt across a protocol adapter.
+
+    The adapters build a new Chat Completions request from known fields only.
+    The dispatcher validates the value and supplies the session salt when it
+    is absent or malformed; `extra_key` is deliberately not carried.
+    """
+    if "cache_salt" in source:
+        chat["cache_salt"] = source["cache_salt"]
 
 
 def is_json_content_type(value: str) -> bool:
