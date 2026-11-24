@@ -241,8 +241,20 @@ identity.
   fresh and consistent with each other. It does not check that their nonce is
   tied to the TDX quote or to the client nonce. The link between the GPUs and
   this VM is the evidence digest signed by the quote-bound receipt key.
+- **The GPUs' protected mode.** Since 2026-11-24 the service runs on OS image
+  `dstack-0.6.5`, and its measured configuration tells the OS not to attest
+  the GPUs at boot (`"attest_gpu": false`). The hosting provider set this
+  because the OS's check does not recognise the multi-GPU Protected PCIe mode
+  that the eight H200 GPUs run in. Nothing in the measured boot chain
+  currently verifies that mode, and ACK does not either: the NVIDIA tokens it
+  checks show genuine GPUs, accepted firmware, secure boot and debug off, not
+  the mode. The setting is part of the measured configuration, so it is
+  covered by the compose hash ACK compares with the policy; ACK does not
+  report it separately. The independent verifier in
+  [AdverserialAI/cyberseek-transparency](https://github.com/AdverserialAI/cyberseek-transparency)
+  prints it as a warning on every run.
 - **Source-to-measurement mapping.** ACK compares measurements with the policy.
-  It does not rebuild the OS image (`dstack-nvidia-0.5.15`), the proxy or the
+  It does not rebuild the OS image (`dstack-0.6.5`), the proxy or the
   compose file to show that the policy values correspond to public source.
 - **The model server.** ACK does not attest SGLang separately; it is covered only
   through the measured deployment configuration.
@@ -389,11 +401,11 @@ published policy with
 [AdverserialAI/cyberseek-transparency](https://github.com/AdverserialAI/cyberseek-transparency).
 
 **November 2026 rotation.** The move to enclave-generated keys (attest-proxy
-rc.31 and later, now rc.33) and to OS image `dstack-nvidia-0.5.15` replaced the
-receipt key. As of 2026-11-24 the service is offline while the provider repairs
-hardware after a migration, and the new policy will be published when it is
-back. Until then `ack attestation` fails closed and `ack upgrade` cannot fetch
-the new pins. Once the policy is published, run `ack upgrade` once, then
+rc.31 and later, now rc.33) and to a new OS image (`dstack-0.6.5` since
+2026-11-24) replaced the receipt key. The service was restored on 2026-11-24;
+run `ack upgrade` once the new policy is published. Until it is, the published
+policy still describes the previous release, so `ack attestation` fails closed
+and `ack upgrade` cannot fetch the new pins. After `ack upgrade`, run
 `ack attestation`, then start a new session.
 
 An enclave restart alone needs no action. The gateway notices that the enclave no
@@ -461,7 +473,7 @@ Kimi Code may rewrite `config.toml` and move the ACK model entry outside its man
 
 ### Server key rotation and per-session cache salt (0.2.14)
 
-The service now generates its receipt, meter, TLS and EHBP keys inside the enclave (the EHBP key afresh at every boot) and runs on OS image `dstack-nvidia-0.5.15`, so its published policy changed. After the rotation run `ack upgrade`, then `ack attestation`, then start a new coding session (see [After a server key rotation](#after-a-server-key-rotation)); a receipt-key mismatch now says exactly that instead of reporting an unconfigured key, and `ack doctor` compares the local pins with the published policy. A long-running gateway re-reads re-pinned keys, and after an enclave restart it re-verifies the endpoint and retries once when the request provably did not run (stale EHBP or TLS key). Nothing about verification is relaxed: no key is taken from a failed exchange and ACK never re-pins on its own.
+The service now generates its receipt, meter, TLS and EHBP keys inside the enclave (the EHBP key afresh at every boot) and runs on a new OS image (`dstack-0.6.5` since 2026-11-24), so its published policy changes. After the rotation run `ack upgrade`, then `ack attestation`, then start a new coding session (see [After a server key rotation](#after-a-server-key-rotation)); a receipt-key mismatch now says exactly that instead of reporting an unconfigured key, and `ack doctor` compares the local pins with the published policy. A long-running gateway re-reads re-pinned keys, and after an enclave restart it re-verifies the endpoint and retries once when the request provably did not run (stale EHBP or TLS key). Nothing about verification is relaxed: no key is taken from a failed exchange and ACK never re-pins on its own.
 
 Every forwarded request now carries a `cache_salt`: 32 random bytes (unpadded base64url) created per gateway process, which is one `ack code` session or swarm. It separates that session's prefix cache inside the enclave and contains no user data. A client-supplied `cache_salt` matching `^[A-Za-z0-9_-]{32,128}$` is kept by the gateway; a malformed one is replaced; a client `extra_key` is removed because the proxy rejects it. The proxy never passes the salt to the model server as sent: it always replaces it with an HMAC, keyed per boot, over the billing-signed account id and that salt, so accounts cannot share cache entries whatever salt they send. The salt is counted in the entitlement's input bound. No measurement, OS-image, KMS or key value is compiled into ACK: they come from the published policy.
 
