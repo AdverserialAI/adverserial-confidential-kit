@@ -3,11 +3,11 @@
 > **Historical record.** The sections below describe validation runs from
 > October 2026 and are kept as written. They predate the November 2026 server
 > key rotation (attest-proxy rc.31–rc.33, enclave-generated keys, OS image
-> `dstack-nvidia-0.5.15`) and ACK 0.2.14. The production model is now
+> `dstack-0.6.5`) and ACK 0.2.14. The production model is now
 > `adverserial/cyberseek`; `lordx64/cyberglm` is available only on request.
 > Test counts quoted below are those of the release they describe. The live
 > harness matrix has not been rerun against the rotated service, which was
-> offline on 2026-11-24. For what ACK verifies today see the
+> restored on 2026-11-24 and whose new policy was not yet published then. For what ACK verifies today see the
 > [README](../README.md#what-ack-verifies-and-what-it-does-not).
 
 Validation performed on macOS (Apple Silicon), Node.js 26.5.0 and Python 3.14.4,
