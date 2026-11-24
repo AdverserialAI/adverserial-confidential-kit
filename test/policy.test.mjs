@@ -6,16 +6,41 @@ import { tmpdir } from 'node:os';
 import { configureKimi, configureOpenCode, harnessCommand, resolveHarnessBinary } from '../lib/ack.mjs';
 import { fetchProductionPolicy } from '../lib/ack.mjs';
 
+// An unsigned policy site: the document exists, its Sigstore bundle does not.
+// The signed paths are covered in policy-transparency.test.mjs.
+const unsignedSite = (document) => async (url) => {
+  if (String(url).endsWith('.sigstore.json')) return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+  const bytes = Buffer.from(JSON.stringify(document));
+  return { ok: true, status: 200, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) };
+};
+const scratchEnv = async (extra = {}) => ({ ACK_HOME: await mkdtemp(join(tmpdir(), 'ack-policy-home-')), ACK_QUIET: '1', ...extra });
+
 test('rejects a policy without pinned receipt keys', async () => {
-  await assert.rejects(
-    () => fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: {} }) }) }),
-    /incomplete/
-  );
+  const env = await scratchEnv();
+  try {
+    await assert.rejects(
+      () => fetchProductionPolicy({ env, fetchImpl: unsignedSite({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: {} }) }),
+      /incomplete/
+    );
+  } finally { await rm(env.ACK_HOME, { recursive: true, force: true }); }
 });
 
-test('accepts an active P-256 receipt-key policy', async () => {
-  const result = await fetchProductionPolicy({ fetchImpl: async () => ({ ok: true, json: async () => ({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } }) }) });
-  assert.equal(result.model_id, 'adverserial/cyberseek');
+test('accepts an active P-256 receipt-key policy while unsigned policies are still tolerated', async () => {
+  const env = await scratchEnv();
+  try {
+    const result = await fetchProductionPolicy({ env, fetchImpl: unsignedSite({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } }) });
+    assert.equal(result.model_id, 'adverserial/cyberseek');
+  } finally { await rm(env.ACK_HOME, { recursive: true, force: true }); }
+});
+
+test('refuses an unsigned production policy once enforcement is on', async () => {
+  const env = await scratchEnv({ ACK_POLICY_TRANSPARENCY: 'enforce' });
+  try {
+    await assert.rejects(
+      () => fetchProductionPolicy({ env, fetchImpl: unsignedSite({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } }) }),
+      /no transparency signature/
+    );
+  } finally { await rm(env.ACK_HOME, { recursive: true, force: true }); }
 });
 
 test('the packaged hardware verifier resolves its bundled runtime', async () => {
@@ -79,4 +104,21 @@ test('installs OpenCode verifier plugin files locally and gives the slash comman
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test('policy transparency status reports unsigned, unreachable and refused without throwing', async () => {
+  const { policyTransparencyStatus } = await import('../lib/ack.mjs');
+  const document = { status: 'active', model_id: 'adverserial/cyberseek', receipt_keys: { kid: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y' } } };
+  const env = await scratchEnv();
+  try {
+    const unsigned = await policyTransparencyStatus(env, { fetchImpl: unsignedSite(document) });
+    assert.equal(unsigned.status, 'unsigned');
+    assert.equal(unsigned.ok, false);
+    assert.match(unsigned.detail, /^unsigned \(not published \(404\)\); used on HTTPS trust alone \[mode: warn\]$/);
+    const down = await policyTransparencyStatus(env, { fetchImpl: async () => { throw new Error('offline'); } });
+    assert.equal(down.status, 'unreachable');
+    const enforced = await policyTransparencyStatus({ ...env, ACK_POLICY_TRANSPARENCY: 'enforce' }, { fetchImpl: unsignedSite(document) });
+    assert.equal(enforced.status, 'refused');
+    assert.match(enforced.detail, /no transparency signature/);
+  } finally { await rm(env.ACK_HOME, { recursive: true, force: true }); }
 });

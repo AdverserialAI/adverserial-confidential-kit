@@ -8,6 +8,13 @@ it does not replace licenses attached to third-party components.
   project](https://github.com/tinfoilsh/encrypted-http-body-protocol) under MIT.
 - **TOML configuration:** `smol-toml` 1.9.1 is licensed under BSD-3-Clause; its license is preserved in `resources/licenses/smol-toml-BSD-3-Clause.txt`.
 - **Hardware evidence:** `@phala/dcap-qvl` 0.6.5 is licensed under Apache-2.0.
+- **Policy transparency:** `@sigstore/verify` 4.1.3, `@sigstore/bundle` 5.0.1,
+  `@sigstore/core` 4.0.1 and `@sigstore/protobuf-specs` 0.5.2 (Apache-2.0, the
+  Sigstore project) verify policy signatures in Node; the optional Python extra
+  uses `sigstore` 4.6 (Apache-2.0). `resources/sigstore/trusted_root.json` is the
+  Sigstore public-good trusted root as distributed by the Sigstore TUF repository.
+  The files under `test/fixtures/sigstore/` are public signatures made by the
+  goreleaser and sigstore-conformance projects, used only as test vectors.
 - **JavaScript dependencies:** dependency manifests identify exact versions.
   Copies of the installed packages' license and notice files are preserved in
   [`resources/licenses/`](resources/licenses/), including libraries incorporated

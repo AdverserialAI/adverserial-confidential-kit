@@ -12,9 +12,12 @@ const productionURL = 'https://verify.adverserial.ai/policies/production.json';
 const oldKeys = { 'old-kid': { kty: 'EC', crv: 'P-256', x: 'old-x', y: 'old-y' } };
 const newKeys = { 'new-kid': { kty: 'EC', crv: 'P-256', x: 'new-x', y: 'new-y' } };
 const policy = (receipt_keys) => ({ status: 'active', model_id: 'adverserial/cyberseek', receipt_keys });
+// A policy site that publishes no Sigstore bundle (signed paths: policy-transparency.test.mjs).
 const serving = (document) => async (url) => {
+  if (url === `${productionURL}.sigstore.json`) return { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
   assert.equal(url, productionURL);
-  return { ok: true, json: async () => structuredClone(document) };
+  const bytes = Buffer.from(JSON.stringify(document));
+  return { ok: true, status: 200, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) };
 };
 
 test('pins match only when every published receipt key is pinned unchanged', () => {
@@ -30,7 +33,7 @@ test('pins match only when every published receipt key is pinned unchanged', () 
 test('after the service rotates its keys, doctor says so and the re-pin path used by ack upgrade recovers', async () => {
   const home = await mkdtemp(join(tmpdir(), 'ack-rotation-'));
   try {
-    const env = { ACK_HOME: home, HOME: home, NODE_ENV: 'test', ACK_TEST_STORAGE_KEY: Buffer.alloc(32, 9).toString('base64url') };
+    const env = { ACK_HOME: home, HOME: home, ACK_QUIET: '1', NODE_ENV: 'test', ACK_TEST_STORAGE_KEY: Buffer.alloc(32, 9).toString('base64url') };
     await writeFile(join(home, 'ack.json'), JSON.stringify({ version: 1, model: 'adverserial/cyberseek', endpoint: 'https://api.adverserial.ai/v1', apiKey: 'private-test-key-for-rotation' }));
     await writeFile(join(home, 'receipt-keys.json'), JSON.stringify(oldKeys));
 
@@ -52,7 +55,7 @@ test('after the service rotates its keys, doctor says so and the re-pin path use
 test('the pin check degrades safely offline, before init, and with damaged pins', async () => {
   const home = await mkdtemp(join(tmpdir(), 'ack-rotation-'));
   try {
-    const env = { ACK_HOME: home, HOME: home };
+    const env = { ACK_HOME: home, HOME: home, ACK_QUIET: '1' };
     assert.deepEqual(await receiptPinStatus(env, { fetchImpl: serving(policy(newKeys)) }), { ok: false, detail: 'Run init to fetch the published policy' });
     await writeFile(join(home, 'receipt-keys.json'), '{}');
     assert.match((await receiptPinStatus(env, { fetchImpl: serving(policy(newKeys)) })).detail, /incomplete\. Run ack upgrade/);

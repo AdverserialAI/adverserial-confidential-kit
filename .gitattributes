@@ -1,0 +1,4 @@
+# Signature test vectors and the trusted root are compared byte for byte.
+test/fixtures/sigstore/** -text
+resources/sigstore/trusted_root.json -text
+resources/python/adverserial/sigstore_trusted_root.json -text

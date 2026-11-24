@@ -32,6 +32,7 @@ import base64
 import hashlib
 import http.client
 import json
+import os
 import secrets
 import time
 import urllib.request
@@ -76,6 +77,16 @@ _PRODUCTION_POLICY_URL = "https://verify.adverserial.ai/policies/production.json
 
 
 def _load_published_policy(timeout: float) -> Dict[str, Any]:
+    # The ack CLI and the gateway check the policy's Sigstore signature in the
+    # Node verifier. A standalone user of this SDK can opt in to the same check
+    # here (needs the optional 'transparency' extra, Python 3.11+).
+    if os.environ.get("ACK_POLICY_TRANSPARENCY", "").lower() == "enforce":
+        from .policy_transparency import default_state_dir, fetch_signed_policy
+
+        policy = fetch_signed_policy(_PRODUCTION_POLICY_URL, state_dir=default_state_dir(), mode="enforce", timeout=timeout)["policy"]
+        if not isinstance(policy, dict):
+            raise ValueError("the published policy is not a JSON object")
+        return policy
     request = urllib.request.Request(
         _PRODUCTION_POLICY_URL,
         headers={"Accept": "application/json", "Cache-Control": "no-cache"},

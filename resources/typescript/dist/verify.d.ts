@@ -42,6 +42,13 @@ export type HardwareEvidenceVerifier = (input: {
 export type VerifyEndpointOptions = {
     /** Approved runtime identity, required by production integrations. */
     expectedPolicy?: RuntimePolicy;
+    /**
+     * Loads the production policy when `expectedPolicy` is not given. It must
+     * verify the policy's Sigstore bundle (signature over the served bytes,
+     * transparency-log inclusion, publishing workflow identity, no rollback)
+     * and reject otherwise. Under Node the kit's verifier is used by default.
+     */
+    policyProvider?: (url: string) => Promise<unknown>;
     /** Expected receipt claim `model_id`, e.g. "lordx64/cyberglm". */
     expectedModelId: string;
     /** Pinned receipt verification keys: JWS header kid -> public JWK (P-256). */
