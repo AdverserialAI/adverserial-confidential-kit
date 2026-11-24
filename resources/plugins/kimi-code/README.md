@@ -1,5 +1,15 @@
 # @adverserial/kimi-code-plugin
 
+> **Bundled copy.** `ack code kimi` installs and configures this integration
+> for you; the manual steps below are for using it without ACK. Paths such as
+> `plugins/…`, `profiles/…` and `typescript/…` refer to the
+> [confidential-sdk](https://github.com/AdverserialAI/confidential-sdk) layout;
+> in this repository the same files live under `resources/`, and the hardware
+> verifier is `resources/typescript/adverserial-hardware-verify.mjs`. The
+> production model is `adverserial/cyberseek`. The published policy is fetched
+> over HTTPS and is not signed; only the receipt keys are pinned locally. See
+> [what ACK verifies and what it does not](../../../README.md#what-ack-verifies-and-what-it-does-not).
+
 Verify the attestation of the Adverserial confidential inference endpoint
 from inside [Kimi Code CLI](https://www.kimi.com/code/docs/en/) — as a
 session hook, an on-demand CLI, and an agent skill.
@@ -10,8 +20,8 @@ verification receipt, checked against pinned receipt keys. Without pinned
 keys it **refuses to claim "verified"**; the explicit escape hatch
 (`--trust-evidence-key` / `ADVERSERIAL_TRUST_EVIDENCE_KEY=1`) TOFU-bootstraps
 the ephemeral key from the evidence and the verdict reads **UNPINNED (TOFU
-dev mode)**. Production deployments pin the key set published at
-https://verify.adverserial.ai.
+dev mode)**. Production deployments pin the receipt keys from the policy
+published at https://verify.adverserial.ai (`ack init` / `ack upgrade`).
 
 ## Layout
 
@@ -90,7 +100,7 @@ Example output:
 ```
 ADVERSERIAL ATTESTATION: VERIFIED — UNPINNED (TOFU dev mode)
   endpoint  https://127.0.0.1:51234/v1
-  model     lordx64/cyberglm
+  model     adverserial/cyberseek
   policy    adverserial-policy/dev
   evidence  sha256:…
   receipt   kid=… digest=sha256:…
@@ -115,7 +125,7 @@ failed/unpinned verdict as verified.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADVERSERIAL_API_URL` | `https://api.adverserial.ai/v1` | Endpoint base URL |
-| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id` |
+| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id`. This bundle's built-in default is a legacy id; ACK sets `adverserial/cyberseek`, and you must too when running it by hand |
 | `ADVERSERIAL_ISSUER` | `https://verify.adverserial.ai` | Expected receipt `iss` |
 | `ADVERSERIAL_AUDIENCE` | `https://chat.adverserial.ai` | Expected receipt `aud` |
 | `ADVERSERIAL_EXPECTED_ENDPOINT` | unset | Also pin the receipt `endpoint` claim |

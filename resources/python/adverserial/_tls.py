@@ -1,8 +1,10 @@
 """TLS helpers: SPKI hashing and an HTTPS connection pinned to the attested
 certificate public key.
 
-The attest-proxy serves a self-signed certificate by design — trust comes
-from the TDX-quote-bound SPKI hash, not from a CA. Every connection made by
+Trust in the attest-proxy's TLS key comes from the TDX-quote-bound SPKI hash,
+not from a CA. The key is generated inside the enclave: production obtains its
+certificate by in-enclave ACME (attest-proxy rc.31 and later), while development
+and older releases serve a self-signed certificate. Every connection made by
 this SDK therefore disables CA validation and instead authenticates the peer
 by comparing the SHA-256 of the leaf certificate's DER SubjectPublicKeyInfo
 against the value published in the verified attestation evidence.
@@ -29,8 +31,9 @@ def spki_sha256_from_cert_der(cert_der: bytes) -> str:
 
 
 def attestation_ssl_context() -> ssl.SSLContext:
-    """Context for the attestation fetch: no CA check (self-signed cert);
-    the peer is authenticated afterwards via the SPKI hash in the evidence."""
+    """Context for the attestation fetch: no CA check (the certificate may be
+    self-signed or ACME-issued; neither is what is trusted); the peer is
+    authenticated afterwards via the SPKI hash in the evidence."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE

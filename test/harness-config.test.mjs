@@ -43,7 +43,9 @@ test('Kimi rewritten reserved aliases do not create duplicate tables or change u
   assert.deepEqual(actual.providers.other,unrelated.providers.other);assert.deepEqual(actual.models.other,unrelated.models.other);
   assert.equal(actual.models.adverserial_confidential.model,'adverserial/cyberseek');
   assert.equal(actual.providers.adverserial_confidential.base_url,'http://127.0.0.1:8765/v1');
-  assert.ok(!text.includes(state().apiKey));assert.equal((await stat(path)).mode&0o777,0o600);
+  assert.ok(!text.includes(state().apiKey));
+  // Windows reports ACL-managed files as 0o666; POSIX modes are not enforceable there.
+  if(process.platform!=='win32')assert.equal((await stat(path)).mode&0o777,0o600);
  }
 });
 test('invalid Kimi config is preserved and parse errors do not echo secrets',async t=>{

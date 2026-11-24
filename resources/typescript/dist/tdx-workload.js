@@ -10,7 +10,7 @@ const concat = (...arrays) => { const a = new Uint8Array(arrays.reduce((n, x) =>
     i += x.length;
 } return a; };
 const sha384 = async (a) => new Uint8Array(await crypto.subtle.digest('SHA-384', asArrayBuffer(a)));
-/** dstack v0.5.x event-log V1. See cc-eventlog/src/runtime_events.rs at v0.5.9. */
+/** dstack v0.5.x event-log V1. See cc-eventlog/src/runtime_events.rs (identical at v0.5.9 and v0.5.15). All pinned values come from the published policy. */
 export const verifyTDXWorkload = async (report, eventLog, policy) => {
     if ((report.tdAttributes[0] & 1) !== 0)
         throw new Error('Debug-enabled TDX workloads are not accepted.');

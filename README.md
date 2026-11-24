@@ -4,12 +4,12 @@
 
 ### Your coding agents. One confidential console.
 
-[![Version](https://img.shields.io/badge/ACK-0.2.5-12b8a6)](package.json)
+[![Version](https://img.shields.io/badge/ACK-0.2.14-12b8a6)](package.json)
 [![Runtime](https://img.shields.io/badge/Node.js-18%2B-43853d)](package.json)
 [![Platform](https://img.shields.io/badge/key_vault-Keychain_%7C_Windows_DPAPI-555)](#requirements)
 [![License](https://img.shields.io/badge/license-proprietary_source--available-6845bd)](LICENSE)
 
-[Website](https://adverserial.ai) · [How confidentiality works](https://adverserial.ai/confidential/) · [Verify a runtime](https://verify.adverserial.ai) · [SDK](https://github.com/AdverserialAI/confidential-sdk) · [Security](mailto:security@adverserial.ai)
+[Website](https://adverserial.ai) · [How confidentiality works](https://adverserial.ai/confidential/) · [Verify a runtime](https://verify.adverserial.ai) · [SDK](https://github.com/AdverserialAI/confidential-sdk) · [Server source](https://github.com/AdverserialAI/attest-proxy) · [Transparency log](https://github.com/AdverserialAI/cyberseek-transparency) · [Security](mailto:security@adverserial.ai)
 
 </div>
 
@@ -47,8 +47,10 @@ ack code
 ```
 
 Enter your Adverserial API key when prompted. Input is masked. ACK fetches the
-active verification policy, pins its receipt keys and installs an isolated
-Python gateway runtime. Choose an installed harness and start working.
+active verification policy over HTTPS, pins its receipt keys locally and installs
+an isolated Python gateway runtime. Choose an installed harness and start working.
+The policy document itself is not signed; see
+[what ACK verifies and what it does not](#what-ack-verifies-and-what-it-does-not).
 
 Run `ack` to open the full-screen console. Inside it, use `init`, `code`,
 `models`, `keys`, `attestation` or the searchable command palette.
@@ -176,6 +178,88 @@ identity. The gateway verifies the confidential request path and signed final
 inference receipt separately. Failed, stale, unpinned or synthetic evidence is
 not a verified confidential runtime.
 
+### What ACK verifies and what it does not
+
+The service is [attest-proxy](https://github.com/AdverserialAI/attest-proxy)
+(v0.1.0-rc.33 at the time of writing) running in an Intel TDX confidential VM in
+front of an SGLang model server that is reachable only on the VM-internal
+network. Since rc.31 every server private key is generated inside the enclave:
+the receipt key (P-256) and the meter key (Ed25519) on first boot, the
+encrypted-body (EHBP, X25519) key afresh at every boot and held in memory only,
+and the TLS key by in-enclave ACME. The operator does not provision or hold any
+of them. Releases up to rc.30 used operator-generated seeds and a fixed EHBP
+identity.
+
+**Checked on every `ack attestation`, and by the gateway before any prompt is sent:**
+
+- **Attestation receipt.** ES256 signature against a receipt key pinned on this
+  machine (`receipt-keys.json`), plus the fresh nonce, issuer, audience, model,
+  endpoint, expiry and the digest of the returned evidence.
+- **Intel TDX quote.** Verified locally with `@phala/dcap-qvl` against Intel
+  collateral fetched through Phala's PCCS. The TCB status must be `UpToDate`;
+  any other status, and any debug-enabled TD, is rejected.
+- **Quote binding.** The quote's `report_data` must equal
+  `SHA-256("adverserial-attestation-v2\0" || nonce || TLS SPKI || receipt-key SPKI || EHBP public key)`
+  followed by 32 zero bytes. This ties the fresh nonce and the three public keys
+  to the quote.
+- **Event-log replay.** RTMR3 is recomputed from the dstack event log and must
+  equal the quoted value. MRTD, RTMR0–2, the application id, the compose hash
+  and the OS image hash are then compared with the published policy.
+- **Workload policy.** Model digest, runtime image digest, deployment
+  configuration digest, proxy release, TLS key and receipt key are compared with
+  the published policy. No measurement, OS image or key value is compiled into ACK.
+- **NVIDIA evidence.** Every NRAS token is verified against NVIDIA's published
+  signing keys, the overall result must be true, each per-GPU token must match
+  its digest, the bundle must be fresh, and the GPU count must meet the policy
+  minimum.
+- **TLS key pinning.** The gateway accepts exactly the quote-bound TLS public key
+  on every connection and checks it after the handshake, before any request
+  bytes or credentials are written.
+- **Encrypted bodies (EHBP).** Requests are HPKE-encrypted to the quote-bound
+  X25519 key and responses are decrypted locally; a plaintext fallback is refused.
+- **Per-inference receipt.** Each completed response must carry a receipt signed
+  by the attested receipt key and bound to the request nonce, the exact request
+  and response bytes, the model, the TLS key and the attestation state.
+
+**Not checked by ACK:**
+
+- **The published policy is not signed.** It is fetched live over HTTPS from
+  `https://verify.adverserial.ai/policies/production.json`; its integrity rests
+  on that host and its TLS certificate. Only the receipt keys are pinned locally.
+  A changed policy cannot make a different enclave pass between upgrades, because
+  that enclave cannot sign with the pinned receipt key. `ack init` and
+  `ack upgrade` pin whatever policy is published at that moment, so compare it
+  with the [transparency log](https://github.com/AdverserialAI/cyberseek-transparency)
+  before re-pinning if you want an independent check.
+- **The key-attestation statement.** The server publishes
+  `GET /.well-known/adverserial-key-attestation` (all public keys with
+  `keys_origin: enclave-generated`, in a quote whose `report_data` is
+  `SHA-512("adverserial-key-attestation-v1\n" || statement)`). ACK does not fetch
+  or verify it yet. ACK proves that the keys are bound to the attested enclave,
+  not where they were generated; that follows from the measured server source.
+- **GPU-to-quote binding.** ACK verifies that the NVIDIA tokens are genuine,
+  fresh and consistent with each other. It does not check that their nonce is
+  tied to the TDX quote or to the client nonce. The link between the GPUs and
+  this VM is the evidence digest signed by the quote-bound receipt key.
+- **Source-to-measurement mapping.** ACK compares measurements with the policy.
+  It does not rebuild the OS image (`dstack-nvidia-0.5.15`), the proxy or the
+  compose file to show that the policy values correspond to public source.
+- **The model server.** ACK does not attest SGLang separately; it is covered only
+  through the measured deployment configuration.
+- **The meter key and billing.** Usage metering signatures are verified by
+  billing, not by ACK.
+- **TLS pinning in the Node verifier.** `ack attestation` and the harness badges
+  check that the TLS key in the evidence is quote-bound and matches the policy,
+  but Node's `fetch` cannot pin the connection it uses. Channel pinning is
+  enforced by the gateway, which is the only component that sends prompts.
+- **Your own machine.** Harness CLIs, their tools and other local processes run
+  with your account's access. Status badges and cached verdicts are local
+  information, not a security boundary.
+
+For a check that does not depend on ACK, use the independent verifier and the
+attestation history in
+[AdverserialAI/cyberseek-transparency](https://github.com/AdverserialAI/cyberseek-transparency).
+
 The console badge starts unchecked and expires with the evidence. Supported
 harness interfaces expose verification as follows:
 
@@ -275,6 +359,48 @@ ack upgrade
 `ack upgrade` refreshes runtime files and policy; it does not replace the globally
 installed npm package.
 
+### After a server key rotation
+
+ACK pins the service's receipt-signing keys locally (`receipt-keys.json`, taken
+from the published policy by `ack init` and `ack upgrade`). The TLS key, the TDX
+measurements, the OS image, the application and the deployment configuration are
+not stored locally: every verification compares fresh evidence with the policy
+published at that moment. The encrypted-transport (EHBP) key is never pinned; the
+enclave generates a new one at every boot and ACK accepts it only from a fresh,
+quote-bound attestation.
+
+When the service starts with a new receipt key, verification fails closed with
+`The service rotated its keys … Run ack upgrade`. To recover:
+
+```sh
+ack upgrade        # re-pins the receipt keys from the published policy
+ack attestation    # should report verified
+```
+
+Then start a new `ack code` session. A gateway that is already running picks up
+the new pins on its next request, but a harness's own verification command and
+badge keep the pins they started with until that session is restarted.
+`ack doctor` reports `Receipt-key pins … Out of date` when the published policy
+no longer matches the local pins. ACK never re-pins by itself.
+
+`ack upgrade` trusts the policy published at that moment, and the policy is not
+signed. To check a rotation independently before re-pinning, compare the
+published policy with
+[AdverserialAI/cyberseek-transparency](https://github.com/AdverserialAI/cyberseek-transparency).
+
+**November 2026 rotation.** The move to enclave-generated keys (attest-proxy
+rc.31 and later, now rc.33) and to OS image `dstack-nvidia-0.5.15` replaced the
+receipt key. As of 2026-11-24 the service is offline while the provider repairs
+hardware after a migration, and the new policy will be published when it is
+back. Until then `ack attestation` fails closed and `ack upgrade` cannot fetch
+the new pins. Once the policy is published, run `ack upgrade` once, then
+`ack attestation`, then start a new session.
+
+An enclave restart alone needs no action. The gateway notices that the enclave no
+longer accepts the keys in its cached proof, verifies the endpoint again in full
+and retries the request once — but only when the first attempt provably did not
+run. A request that may already be generating is never repeated.
+
 ## Confidential swarms
 
 Choose workers in the console or run:
@@ -332,3 +458,10 @@ Upstream coding harnesses remain separate products under their own terms.
 ### Kimi Code configuration compatibility (0.2.13)
 
 Kimi Code may rewrite `config.toml` and move the ACK model entry outside its managed comments. ACK now replaces its reserved `adverserial_confidential` provider/model entries semantically before writing the session config, preventing duplicate TOML tables. Other provider/model, environment and default-model settings are preserved. Invalid source configuration is left unchanged with a `kimi doctor config` diagnostic; parse errors never echo configuration secrets. Each launch still uses its own private session config and loopback gateway. Restart ACK/Kimi after installing this update; the main Kimi home and history are preserved.
+
+### Server key rotation and per-session cache salt (0.2.14)
+
+The service now generates its receipt, meter, TLS and EHBP keys inside the enclave (the EHBP key afresh at every boot) and runs on OS image `dstack-nvidia-0.5.15`, so its published policy changed. After the rotation run `ack upgrade`, then `ack attestation`, then start a new coding session (see [After a server key rotation](#after-a-server-key-rotation)); a receipt-key mismatch now says exactly that instead of reporting an unconfigured key, and `ack doctor` compares the local pins with the published policy. A long-running gateway re-reads re-pinned keys, and after an enclave restart it re-verifies the endpoint and retries once when the request provably did not run (stale EHBP or TLS key). Nothing about verification is relaxed: no key is taken from a failed exchange and ACK never re-pins on its own.
+
+Every forwarded request now carries a `cache_salt`: 32 random bytes (unpadded base64url) created per gateway process, which is one `ack code` session or swarm. It separates that session's prefix cache inside the enclave and contains no user data. A client-supplied `cache_salt` matching `^[A-Za-z0-9_-]{32,128}$` is kept by the gateway; a malformed one is replaced; a client `extra_key` is removed because the proxy rejects it. The proxy never passes the salt to the model server as sent: it always replaces it with an HMAC, keyed per boot, over the billing-signed account id and that salt, so accounts cannot share cache entries whatever salt they send. The salt is counted in the entitlement's input bound. No measurement, OS-image, KMS or key value is compiled into ACK: they come from the published policy.
+

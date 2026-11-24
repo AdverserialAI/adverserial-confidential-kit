@@ -1,14 +1,25 @@
 # Adverserial Verify — Codex plugin
 
+> **Bundled copy.** `ack code codex` installs and configures this integration
+> for you; the manual steps below are for using it without ACK. Paths such as
+> `plugins/…`, `profiles/…` and `typescript/…` refer to the
+> [confidential-sdk](https://github.com/AdverserialAI/confidential-sdk) layout;
+> in this repository the same files live under `resources/`, and the hardware
+> verifier is `resources/typescript/adverserial-hardware-verify.mjs`. The
+> production model is `adverserial/cyberseek`. The published policy is fetched
+> over HTTPS and is not signed; only the receipt keys are pinned locally. See
+> [what ACK verifies and what it does not](../../../README.md#what-ack-verifies-and-what-it-does-not).
+
 Verify the attestation of the Adverserial confidential inference endpoint
 before trusting it with code, secrets, or prompts from
 [Codex](https://developers.openai.com/codex) (Codex CLI and the Codex
 desktop app — both share `~/.codex`).
 
 A proxy receipt is not hardware proof. The bundled skill requires all three
-checks before the endpoint may be called confidential: pinned receipt keys
-and policy from `https://verify.adverserial.ai`, fresh nonce-bound endpoint
-evidence, and an independent TDX/GPU verifier named by
+checks before the endpoint may be called confidential: receipt keys pinned
+from the policy published at `https://verify.adverserial.ai`, fresh nonce-bound
+endpoint evidence that matches that policy, and an independent TDX/GPU verifier
+named by
 `ADVERSERIAL_HARDWARE_VERIFIER_COMMAND`. Missing any one of these is a
 failure, never a "verified" result.
 
@@ -97,7 +108,7 @@ codex --profile confidential
 ```
 
 The profile uses the native Responses endpoint and disables OpenAI-account
-fallback for this model. It pins every request to `lordx64/cyberglm`; Codex
+fallback for this model. It pins every request to `adverserial/cyberseek`; Codex
 must not substitute an OpenAI model alias. The gateway preserves Responses
 function calls and function-call outputs, streams function-argument events,
 obtains a one-use billing entitlement, and requires the final runtime receipt
@@ -107,16 +118,17 @@ before a turn can complete.
 
 ```sh
 export ADVERSERIAL_API_URL='https://api.adverserial.ai/v1'             # default
-export ADVERSERIAL_MODEL='lordx64/cyberglm'                            # default
+export ADVERSERIAL_MODEL='adverserial/cyberseek'                       # default
 export ADVERSERIAL_RECEIPT_KEYS_FILE="$HOME/.config/adverserial/receipt-keys.json"
 export ADVERSERIAL_HARDWARE_VERIFIER_COMMAND='/absolute/path/to/adverserial-hardware-verify'
 ```
 
 The keys file is a JSON object mapping key id → public EC P-256 JWK. The key
-set and hardware verifier come from the signed policy published at
-`https://verify.adverserial.ai`; the shipped
-`typescript/bin/adverserial-hardware-verify.mjs` in this repository is the
-reference verifier. Do not substitute an untrusted URL or a shell command.
+set comes from the policy published at
+`https://verify.adverserial.ai/policies/production.json` (`ack init` and
+`ack upgrade` write the file). That policy is served over HTTPS and is not
+signed. The shipped `resources/typescript/adverserial-hardware-verify.mjs` in
+this repository is the reference hardware verifier. Do not substitute an untrusted URL or a shell command.
 
 ## Security reporting
 

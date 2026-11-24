@@ -52,6 +52,9 @@ Exit codes: `0` = verified, `1` = failed / unpinned / stale / error.
   `ADVERSERIAL_RECEIPT_KEYS_FILE`. Production deployments pin the key set
   published at https://verify.adverserial.ai.
 - `FAILED` — verification ran and was rejected; the `reason` line says why.
+  If the reason says the service rotated its keys, the user must run
+  `ack upgrade`, then `ack attestation`, then start a new session; never
+  work around it.
 
 Two warnings matter when they appear:
 
@@ -66,7 +69,7 @@ Two warnings matter when they appear:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADVERSERIAL_API_URL` | `https://api.adverserial.ai/v1` | Endpoint base URL |
-| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id` |
+| `ADVERSERIAL_MODEL` | `adverserial/cyberseek` | Expected receipt `model_id` |
 | `ADVERSERIAL_ISSUER` | `https://verify.adverserial.ai` | Expected receipt `iss` |
 | `ADVERSERIAL_AUDIENCE` | `https://chat.adverserial.ai` | Expected receipt `aud` |
 | `ADVERSERIAL_EXPECTED_ENDPOINT` | unset | Also pin the receipt `endpoint` claim |

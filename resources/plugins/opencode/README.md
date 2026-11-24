@@ -1,5 +1,15 @@
 # @adverserial/opencode-plugin
 
+> **Bundled copy.** `ack code opencode` installs and configures this integration
+> for you; the manual steps below are for using it without ACK. Paths such as
+> `plugins/…`, `profiles/…` and `typescript/…` refer to the
+> [confidential-sdk](https://github.com/AdverserialAI/confidential-sdk) layout;
+> in this repository the same files live under `resources/`, and the hardware
+> verifier is `resources/typescript/adverserial-hardware-verify.mjs`. The
+> production model is `adverserial/cyberseek`. The published policy is fetched
+> over HTTPS and is not signed; only the receipt keys are pinned locally. See
+> [what ACK verifies and what it does not](../../../README.md#what-ack-verifies-and-what-it-does-not).
+
 [opencode](https://opencode.ai) plugin that lets the agent verify the
 attestation of the Adverserial confidential inference endpoint from inside
 the coding session.
@@ -10,7 +20,8 @@ verification receipt, checked against pinned receipt keys. Without pinned
 keys the tools **refuse to claim "verified"**; the explicit escape hatch
 (`ADVERSERIAL_TRUST_EVIDENCE_KEY=1`) TOFU-bootstraps the ephemeral key from
 the evidence and the verdict reads **UNPINNED (TOFU dev mode)**. Production
-deployments pin the key set published at https://verify.adverserial.ai.
+deployments pin the receipt keys from the policy published at
+https://verify.adverserial.ai (`ack init` / `ack upgrade`).
 
 ## Tools
 
@@ -35,7 +46,7 @@ npm run build            # tsc; output is self-contained (SDK + shared + plugin)
 
 Merge [`../../profiles/opencode.jsonc`](../../profiles/opencode.jsonc) into
 `~/.config/opencode/opencode.json` after starting the local gateway. Select
-`adverserial/lordx64/cyberglm`. OpenCode uses normal OpenAI-compatible
+`adverserial/adverserial/cyberseek`. OpenCode uses normal OpenAI-compatible
 streaming and function tools against `127.0.0.1`; the gateway sends only the
 resulting one-use entitlement and encrypted request to the runtime.
 
@@ -81,7 +92,7 @@ the verdict. Example tool output:
 ```
 ADVERSERIAL ATTESTATION: VERIFIED — UNPINNED (TOFU dev mode)
   endpoint  https://127.0.0.1:51234/v1
-  model     lordx64/cyberglm
+  model     adverserial/cyberseek
   policy    adverserial-policy/dev
   evidence  sha256:…
   receipt   kid=… digest=sha256:…
@@ -126,7 +137,7 @@ Use the adverserial_verify tool to run a fresh Adverserial attestation check
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADVERSERIAL_API_URL` | `https://api.adverserial.ai/v1` | Endpoint base URL |
-| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id` |
+| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id`. This build's built-in default is a legacy id; ACK sets `adverserial/cyberseek`, and you must too when running it by hand |
 | `ADVERSERIAL_ISSUER` | `https://verify.adverserial.ai` | Expected receipt `iss` |
 | `ADVERSERIAL_AUDIENCE` | `https://chat.adverserial.ai` | Expected receipt `aud` |
 | `ADVERSERIAL_EXPECTED_ENDPOINT` | unset | Also pin the receipt `endpoint` claim |
@@ -169,7 +180,7 @@ The hardware verifier command is mandatory (verification fails closed
 without it); `test/dev-hardware-verifier.mjs` is a fixture that accepts only
 synthetic DEV_MODE evidence, mirroring the SDK's own dev test double. Real
 evidence must go through the shipped
-`typescript/bin/adverserial-hardware-verify.mjs`.
+`resources/typescript/adverserial-hardware-verify.mjs`.
 
 This drives the exact tool code path (plugin module + tools + TTL cache)
 under plain Node, without the opencode runtime.

@@ -1,7 +1,11 @@
 """Entitlement exchange and direct, pinned confidential dispatch."""
 from __future__ import annotations
 
+import base64
 import json
+import os
+import re
+import secrets
 import time
 import threading
 import urllib.error
@@ -10,9 +14,28 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from adverserial import UpstreamHTTPError, VerificationError, VerifiedProof, VerifiedSession, verify_endpoint
+from adverserial import (
+    EHBPKeyMismatchError,
+    TLSPinMismatchError,
+    UpstreamHTTPError,
+    VerificationError,
+    VerifiedProof,
+    VerifiedSession,
+    verify_endpoint,
+)
 
-from .config import CANONICAL_MODELS, Config
+from .config import CANONICAL_MODELS, Config, ConfigError, load_receipt_keys
+
+# Accepted by the attested proxy for the optional per-request prefix-cache
+# salt (32-128 characters). Anything else is answered with HTTP 400 by the
+# enclave.
+_CACHE_SALT = re.compile(r"[A-Za-z0-9_-]{32,128}")
+# A proof this young was verified after any reboot that could explain a
+# pre-generation rejection, so re-attesting again would only add latency.
+_REVERIFY_MIN_PROOF_AGE_SECONDS = 30
+# Pre-generation rejections that an undecryptable (stale-key) request could
+# produce. Rate limits and the like never trigger a re-attestation.
+_STALE_KEY_STATUSES = frozenset({400, 401, 403, 422})
 from .hardware import verifier_from_command
 
 
@@ -47,6 +70,23 @@ class OutcomeUnknownError(GatewayError):
     billed generation."""
 
     status_code = 502
+
+
+class _RetryWithFreshProof(Exception):
+    """Internal: the attempt provably did not run and a newer proof exists."""
+
+    def __init__(self, proof: VerifiedProof):
+        super().__init__("retry with a freshly verified proof")
+        self.proof = proof
+
+
+def new_cache_salt() -> str:
+    """A random 32-byte, unpadded base64url prefix-cache salt (43 characters)."""
+    return base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode("ascii")
+
+
+def valid_cache_salt(value: Any) -> bool:
+    return isinstance(value, str) and _CACHE_SALT.fullmatch(value) is not None
 
 
 class _NoBillingRedirect(urllib.request.HTTPRedirectHandler):
@@ -142,6 +182,44 @@ class Dispatcher:
         self.config = config
         self._proofs: dict[str, ProofCache] = {model: ProofCache() for model in CANONICAL_MODELS}
         self._billing_opener = _direct_billing_opener()
+        # One gateway process serves one `ack code` session or swarm and keeps
+        # no conversation state, so the process lifetime is the session. The
+        # salt partitions the enclave's prefix cache per session. The proxy
+        # never forwards it as sent: it replaces it with an HMAC, keyed per
+        # boot, over the billing-signed account id and this salt, so accounts
+        # cannot share cache entries. The salt is random, carries no user
+        # data, is never logged, and is not written to disk.
+        self._cache_salt = new_cache_salt()
+        self._receipt_keys = dict(config.receipt_keys)
+        self._receipt_keys_stamp = self._receipt_keys_file_stamp()
+        self._receipt_keys_lock = threading.Lock()
+
+    def _receipt_keys_file_stamp(self) -> tuple[int, int] | None:
+        path = self.config.receipt_keys_file
+        if not path:
+            return None
+        try:
+            status = os.stat(path)
+        except OSError:
+            return None
+        return status.st_mtime_ns, status.st_size
+
+    def pinned_receipt_keys(self) -> dict[str, dict[str, Any]]:
+        """The current local pins, following `ack upgrade` without a restart.
+
+        The pin file is the same local trust anchor read at startup; only its
+        owner (`ack init` / `ack upgrade`) rewrites it. A missing or malformed
+        file never clears or widens the pins already loaded.
+        """
+        with self._receipt_keys_lock:
+            stamp = self._receipt_keys_file_stamp()
+            if stamp is not None and stamp != self._receipt_keys_stamp:
+                try:
+                    self._receipt_keys = load_receipt_keys(self.config.receipt_keys_file)
+                    self._receipt_keys_stamp = stamp
+                except ConfigError:
+                    pass
+            return self._receipt_keys
 
     def proof_for(self, model: str) -> VerifiedProof:
         model = canonical_model_id(model)
@@ -163,7 +241,7 @@ class Dispatcher:
             proof = verify_endpoint(
                 self.config.cc_api_url,
                 expected_model_id=model,
-                trusted_receipt_keys=self.config.receipt_keys,
+                trusted_receipt_keys=self.pinned_receipt_keys(),
                 issuer=self.config.issuer,
                 audience=self.config.audience,
                 expected_endpoint=expected_endpoint,
@@ -175,6 +253,35 @@ class Dispatcher:
             raise VerificationFailed("Confidential endpoint exposed synthetic dev-mode evidence.")
         cached.proof = proof
         return proof
+
+    def reverified_proof(self, model: str, stale: VerifiedProof) -> VerifiedProof:
+        """Drop `stale` from the cache and verify the endpoint from scratch.
+
+        Used when a request could not be delivered with `stale` (the enclave
+        rebooted and regenerated its keys). Nothing is taken from the failed
+        exchange: the replacement goes through the full attestation, policy,
+        pinned-receipt-key and hardware checks, or the request fails closed.
+        """
+        model = canonical_model_id(model)
+        cached = self._proofs[model]
+        with cached.lock:
+            # Another request may already have replaced it; verify only once.
+            if cached.proof is stale:
+                cached.proof = None
+            return self._refresh_proof(model, cached)
+
+    @staticmethod
+    def _ehbp_key_changed(old: Any, new: Any) -> bool:
+        """True when the enclave now holds a different request-decryption key."""
+        previous, current = getattr(old, "ehbp_public_key_sha256", None), getattr(new, "ehbp_public_key_sha256", None)
+        return bool(current) and previous != current
+
+    @staticmethod
+    def _proof_age(proof: Any) -> float | None:
+        issued = getattr(proof, "issued_epoch", None)
+        if isinstance(issued, bool) or not isinstance(issued, (int, float)):
+            return None
+        return time.time() - issued
 
     def entitlement(self, api_key: str, model: str, max_input_tokens: int, max_output_tokens: int, proof: VerifiedProof) -> str:
         payload = json.dumps({
@@ -222,6 +329,15 @@ class Dispatcher:
         model = canonical_model_id(model)
         if not api_key.startswith("sk-") or len(api_key) < 20:
             raise AuthorizationError("A normal Adverserial API key is required.")
+        # Prefix-cache isolation. The salt is part of the forwarded body, so it
+        # is added before the entitlement bound below is computed. A valid
+        # client-chosen salt is kept; a malformed one would be rejected by the
+        # enclave, so the session salt replaces it. `extra_key` is refused by
+        # the enclave and is never forwarded.
+        payload = dict(payload)
+        payload.pop("extra_key", None)
+        if not valid_cache_salt(payload.get("cache_salt")):
+            payload["cache_salt"] = self._cache_salt
         # The JSON wire body is a safe upper bound on token count for text JSON:
         # a byte-level tokenizer cannot produce more than one token per UTF-8 byte.
         # The SDK re-serializes the payload before sending (adding "stream" and
@@ -234,6 +350,14 @@ class Dispatcher:
         requested_output = requested_output_tokens(payload)
         max_output = min(requested_output, self.config.max_output_tokens)
         proof = self.proof_for(model)
+        try:
+            return self._dispatch(api_key, model, payload, max_input, max_output, proof, may_retry=True)
+        except _RetryWithFreshProof as retry:
+            # Exactly one retry, only after the first attempt provably did not
+            # run, and only with a proof that passed full verification again.
+            return self._dispatch(api_key, model, payload, max_input, max_output, retry.proof, may_retry=False)
+
+    def _dispatch(self, api_key: str, model: str, payload: Mapping[str, Any], max_input: int, max_output: int, proof: VerifiedProof, *, may_retry: bool):
         entitlement = self.entitlement(api_key, model, max_input, max_output, proof)
         # Billing may scale the reservation's output bound down to the plan's
         # remaining allowance (meter.py clamps min(wanted, day, week)). The
@@ -267,12 +391,41 @@ class Dispatcher:
             # reservation, and the caller must not blindly retry.
             if session is None or not session.dispatched:
                 self.release_reservation(api_key, entitlement)
-                raise
+                if isinstance(exc, GatewayError) or not isinstance(exc, (VerificationError, TLSPinMismatchError, OSError)):
+                    raise
+                # The enclave was unreachable, presented a different TLS key,
+                # or the proof could not be used: typically a reboot, after
+                # which the cached proof names keys the enclave no longer
+                # holds. No request bytes were sent, so re-verify and retry
+                # once. A failed re-verification is the error the user needs
+                # (for example "the service rotated its keys: run ack upgrade").
+                if may_retry:
+                    fresh = self.reverified_proof(model, proof)
+                    if fresh is not proof:
+                        raise _RetryWithFreshProof(fresh) from exc
+                raise VerificationFailed(f"Confidential endpoint could not be used with its verified keys: {exc}") from exc
             if isinstance(exc, UpstreamHTTPError):
                 rejected = UpstreamRejected(str(exc))
                 rejected.status_code = exc.status
                 if exc.status < 500:
                     self.release_reservation(api_key, entitlement)
+                    # A pre-generation rejection can mean the request was
+                    # sealed to an EHBP key the enclave replaced at boot. If a
+                    # fresh, fully verified proof carries a different EHBP key,
+                    # the enclave cannot have opened this request: retry once.
+                    # An unchanged key means an ordinary rejection — no retry.
+                    stale_key = isinstance(exc, EHBPKeyMismatchError)
+                    age = self._proof_age(proof)
+                    suspect = exc.status in _STALE_KEY_STATUSES and age is not None and age >= _REVERIFY_MIN_PROOF_AGE_SECONDS
+                    if may_retry and (stale_key or suspect):
+                        try:
+                            fresh = self.reverified_proof(model, proof)
+                        except VerificationFailed:
+                            if stale_key:
+                                raise
+                            fresh = proof
+                        if self._ehbp_key_changed(proof, fresh):
+                            raise _RetryWithFreshProof(fresh) from exc
                 raise rejected from exc
             raise OutcomeUnknownError(
                 "Confidential request outcome unknown: the request reached the enclave and may "

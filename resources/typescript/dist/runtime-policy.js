@@ -46,5 +46,5 @@ export const checkWorkloadPolicy = (policy, evidence, claims, keyId) => {
     const pin = policy.receipt_keys[keyId];
     const observed = evidence.receipt_pubkey_jwk;
     if (!pin || !observed || pin.x !== observed.x || pin.y !== observed.y || pin.crv !== observed.crv)
-        throw new Error('The attested signer does not match the published policy.');
+        throw new Error('The attested signer does not match the published policy. If the service rotated its keys, run `ack upgrade` to re-pin the published policy and retry.');
 };

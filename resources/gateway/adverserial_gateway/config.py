@@ -25,6 +25,17 @@ class ConfigError(ValueError):
     pass
 
 
+def load_receipt_keys(path: str) -> dict[str, dict[str, Any]]:
+    """Read the pinned receipt keys (kid -> public JWK) written by `ack upgrade`."""
+    try:
+        data = json.loads(Path(path).read_text())
+    except Exception as exc:
+        raise ConfigError("ADVERSERIAL_RECEIPT_KEYS_FILE could not be read as JSON") from exc
+    if not isinstance(data, dict) or not data or not all(isinstance(k, str) and isinstance(v, dict) for k, v in data.items()):
+        raise ConfigError("ADVERSERIAL_RECEIPT_KEYS_FILE must be a non-empty JSON object mapping kid to JWK")
+    return data
+
+
 def _https_url(name: str, value: str, *, origin_only: bool = False) -> str:
     parsed = urlsplit(value)
     if (
@@ -85,6 +96,10 @@ class Config:
     hardware_verifier_command: str
     max_input_tokens: int
     max_output_tokens: int
+    # Where receipt_keys came from. A running gateway re-reads this pin file
+    # when `ack upgrade` rewrites it, so a key rotation does not require
+    # restarting every open coding session.
+    receipt_keys_file: str = ""
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
@@ -96,12 +111,7 @@ class Config:
         keys_path = env.get("ADVERSERIAL_RECEIPT_KEYS_FILE", "").strip()
         if not keys_path:
             raise ConfigError("ADVERSERIAL_RECEIPT_KEYS_FILE is required")
-        try:
-            data = json.loads(Path(keys_path).read_text())
-        except Exception as exc:
-            raise ConfigError("ADVERSERIAL_RECEIPT_KEYS_FILE could not be read as JSON") from exc
-        if not isinstance(data, dict) or not data or not all(isinstance(k, str) and isinstance(v, dict) for k, v in data.items()):
-            raise ConfigError("ADVERSERIAL_RECEIPT_KEYS_FILE must be a non-empty JSON object mapping kid to JWK")
+        data = load_receipt_keys(keys_path)
         command = env.get("ADVERSERIAL_HARDWARE_VERIFIER_COMMAND", "").strip()
         if not command:
             raise ConfigError("ADVERSERIAL_HARDWARE_VERIFIER_COMMAND is required; proxy receipts alone are not hardware proof")
@@ -120,4 +130,5 @@ class Config:
             hardware_verifier_command=_hardware_verifier_command(command),
             max_input_tokens=_positive_int("ADVERSERIAL_MAX_INPUT_TOKENS", env.get("ADVERSERIAL_MAX_INPUT_TOKENS", str(MAX_ESTIMATED_INPUT_BOUND)), MAX_ESTIMATED_INPUT_BOUND),
             max_output_tokens=_positive_int("ADVERSERIAL_MAX_OUTPUT_TOKENS", env.get("ADVERSERIAL_MAX_OUTPUT_TOKENS", "65536"), 65536),
+            receipt_keys_file=keys_path,
         )

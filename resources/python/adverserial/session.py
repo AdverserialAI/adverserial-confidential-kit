@@ -16,7 +16,9 @@ when present: signature against the proof's receipt key, nonce echo,
 request/response hashes against the exact bytes sent/received, model, policy,
 issuer/audience, expiry, and the attestation binding's TLS SPKI. A receipt
 that fails any check raises VerificationError — the exchange is not to be
-trusted. A missing receipt is reported as receipt_verified=False.
+trusted. A missing receipt raises VerificationError unless the session was
+created with require_receipts=False (refused for EHBP-attested endpoints), in
+which case it is reported as receipt_verified=False.
 
 Stream hashing rule (must match the proxy): for every upstream `data:` line,
 strip the trailing CR, drop "data:" and ONE leading space, and feed the
@@ -37,12 +39,17 @@ from urllib.parse import urlsplit
 
 from cryptography.exceptions import InvalidSignature
 from ehbp import ServerIdentity
-from ehbp.protocol import ENCAPSULATED_KEY_HEADER, RESPONSE_NONCE_HEADER
+from ehbp.protocol import (
+    ENCAPSULATED_KEY_HEADER,
+    KEY_CONFIG_PROBLEM_TYPE,
+    PROBLEM_JSON_MEDIA_TYPE,
+    RESPONSE_NONCE_HEADER,
+)
 from ._jws import b64url_encode, parse_compact_jws, verify_es256
 from ._tls import PinnedHTTPSConnection
 from .verify import VerificationError, VerifiedProof
 
-__all__ = ["CompletionResponse", "ReceiptStream", "UpstreamHTTPError", "VerifiedSession"]
+__all__ = ["CompletionResponse", "EHBPKeyMismatchError", "ReceiptStream", "UpstreamHTTPError", "VerifiedSession"]
 
 
 def _sha256_b64(data: bytes) -> str:
@@ -90,6 +97,29 @@ class UpstreamHTTPError(VerificationError):
     def __init__(self, status: int, detail: str) -> None:
         self.status = status
         super().__init__(f"POST /chat/completions failed with HTTP {status}: {detail}")
+
+
+class EHBPKeyMismatchError(UpstreamHTTPError):
+    """The enclave could not open the request with its current EHBP key.
+
+    The receiver key in the proof is stale — the enclave generates a new one
+    at every boot. Nothing was decrypted, so no generation ran. Verify the
+    endpoint again to obtain the current quote-bound key before retrying;
+    never take a replacement key from this (unauthenticated) response.
+    """
+
+
+def _is_ehbp_key_mismatch(status: int, content_type: Optional[str], body: bytes) -> bool:
+    """RFC 9457 problem document the EHBP reference server sends for a stale key."""
+    if status != 422 or not content_type:
+        return False
+    if content_type.split(";", 1)[0].strip().lower() != PROBLEM_JSON_MEDIA_TYPE:
+        return False
+    try:
+        problem = json.loads(body[: 64 * 1024])
+    except ValueError:
+        return False
+    return isinstance(problem, dict) and problem.get("type") == KEY_CONFIG_PROBLEM_TYPE
 
 
 class CompletionResponse(dict):
@@ -357,6 +387,8 @@ class VerifiedSession:
             wire_body = response.read()
             receipt_token = response.getheader("X-Adverserial-Receipt")
             if response.status != 200:
+                if _is_ehbp_key_mismatch(response.status, response.getheader("Content-Type"), wire_body):
+                    raise EHBPKeyMismatchError(response.status, "the enclave's EHBP key changed (key configuration mismatch)")
                 raise UpstreamHTTPError(response.status, self._error_detail(encrypted, response, wire_body))
             try:
                 response_nonce = response.getheader(RESPONSE_NONCE_HEADER)
@@ -439,6 +471,8 @@ class VerifiedSession:
             response = connection.getresponse()
             if response.status != 200:
                 data = response.read()
+                if _is_ehbp_key_mismatch(response.status, response.getheader("Content-Type"), data):
+                    raise EHBPKeyMismatchError(response.status, "the enclave's EHBP key changed (key configuration mismatch)")
                 raise UpstreamHTTPError(response.status, self._error_detail(encrypted, response, data))
             nonce_header = response.getheader(RESPONSE_NONCE_HEADER)
             if not nonce_header:

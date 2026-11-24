@@ -33782,7 +33782,7 @@ var checkWorkloadPolicy = (policy, evidence, claims, keyId) => {
   for (const [actual, expected, name] of checks) if (actual !== expected) throw new Error(`The ${name} does not match the published policy.`);
   const pin = policy.receipt_keys[keyId];
   const observed = evidence.receipt_pubkey_jwk;
-  if (!pin || !observed || pin.x !== observed.x || pin.y !== observed.y || pin.crv !== observed.crv) throw new Error("The attested signer does not match the published policy.");
+  if (!pin || !observed || pin.x !== observed.x || pin.y !== observed.y || pin.crv !== observed.crv) throw new Error("The attested signer does not match the published policy. If the service rotated its keys, run `ack upgrade` to re-pin the published policy and retry.");
 };
 
 // typescript/src/verify.ts
@@ -33809,8 +33809,11 @@ var verifyReceiptSignature = async (receipt, trustedReceiptKeys) => {
   const { header, claims, signingInput, signature } = readCompactJws(receipt);
   const algorithm = asNonEmptyString(header.alg);
   const keyId = asNonEmptyString(header.kid);
-  if (algorithm !== "ES256" || !keyId || !trustedReceiptKeys[keyId]) {
+  if (algorithm !== "ES256" || !keyId) {
     throw new Error("The receipt is not signed by a configured ES256 verification key.");
+  }
+  if (!Object.hasOwn(trustedReceiptKeys, keyId)) {
+    throw new Error("The service rotated its keys: the receipt is signed by a key that is not pinned on this machine. Run `ack upgrade` to re-pin the published policy, then start a new coding session.");
   }
   const key = await crypto.subtle.importKey(
     "jwk",

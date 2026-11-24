@@ -5,6 +5,12 @@ raw evidence to the Adverserial protocol first, then invokes two separately
 installed vendor adapters without a shell. Each adapter must return a strictly
 checked JSON result. That keeps the client model- and GPU-agnostic while
 ensuring a replacement adapter cannot silently omit nonce/TLS/event-log checks.
+
+This runner computes the earlier report_data layout,
+SHA-256(nonce || TLS SPKI || receipt SPKI) || 32 zero bytes. The current
+production service (attest-proxy "adverserial-attestation-v2") also binds the
+EHBP public key, so this runner rejects its evidence. ACK and the gateway use
+the Node verifier, resources/typescript/adverserial-hardware-verify.mjs.
 """
 from __future__ import annotations
 

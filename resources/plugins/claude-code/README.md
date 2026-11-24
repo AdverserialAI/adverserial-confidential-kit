@@ -1,5 +1,15 @@
 # @adverserial/claude-code-plugin
 
+> **Bundled copy.** `ack code claude` installs and configures this integration
+> for you; the manual steps below are for using it without ACK. Paths such as
+> `plugins/…`, `profiles/…` and `typescript/…` refer to the
+> [confidential-sdk](https://github.com/AdverserialAI/confidential-sdk) layout;
+> in this repository the same files live under `resources/`, and the hardware
+> verifier is `resources/typescript/adverserial-hardware-verify.mjs`. The
+> production model is `adverserial/cyberseek`. The published policy is fetched
+> over HTTPS and is not signed; only the receipt keys are pinned locally. See
+> [what ACK verifies and what it does not](../../../README.md#what-ack-verifies-and-what-it-does-not).
+
 Verify the attestation of the Adverserial confidential inference endpoint
 from inside [Claude Code](https://code.claude.com/docs/en/plugins) — as a
 session hook, a slash command, an agent skill, and a status-line badge.
@@ -10,8 +20,8 @@ verification receipt, checked against pinned receipt keys. Without pinned
 keys it **refuses to claim "verified"**; the explicit escape hatch
 (`--trust-evidence-key` / `ADVERSERIAL_TRUST_EVIDENCE_KEY=1`) TOFU-bootstraps
 the ephemeral key from the evidence and the verdict reads **UNPINNED (TOFU
-dev mode)**. Production deployments pin the key set published at
-https://verify.adverserial.ai.
+dev mode)**. Production deployments pin the receipt keys from the policy
+published at https://verify.adverserial.ai (`ack init` / `ack upgrade`).
 
 ## Layout
 
@@ -61,7 +71,7 @@ and text deltas. The gateway independently validates the fresh runtime proof
 before dispatch and the signed inference receipt before ending the stream.
 
 The profile also pins Claude Code's background and small/fast agent roles to
-`lordx64/cyberglm`. As a compatibility safeguard, the loopback gateway maps
+`adverserial/cyberseek`. As a compatibility safeguard, the loopback gateway maps
 only Claude-family child-model aliases to that canonical ID before it verifies
 the runtime or requests an entitlement; no alias reaches billing or the CVM.
 
@@ -120,7 +130,7 @@ every plugin update, and `settings.json` does not expand
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADVERSERIAL_API_URL` | `https://api.adverserial.ai/v1` | Endpoint base URL |
-| `ADVERSERIAL_MODEL` | `lordx64/cyberglm` | Expected receipt `model_id` |
+| `ADVERSERIAL_MODEL` | `adverserial/cyberseek` | Expected receipt `model_id` |
 | `ADVERSERIAL_ISSUER` | `https://verify.adverserial.ai` | Expected receipt `iss` |
 | `ADVERSERIAL_AUDIENCE` | `https://chat.adverserial.ai` | Expected receipt `aud` |
 | `ADVERSERIAL_EXPECTED_ENDPOINT` | unset | Also pin the receipt `endpoint` claim |
@@ -135,7 +145,7 @@ Notes:
 - The keys file is a JSON object mapping key id → public EC P-256 JWK, e.g.
   `{"<kid>": {"kty":"EC","crv":"P-256","x":"…","y":"…"}}`. Set only one of
   `ADVERSERIAL_RECEIPT_KEYS_JSON` / `ADVERSERIAL_RECEIPT_KEYS_FILE`.
-- The shipped `typescript/bin/adverserial-hardware-verify.mjs` is the
+- The shipped `resources/typescript/adverserial-hardware-verify.mjs` is the
   reference hardware verifier; point `ADVERSERIAL_HARDWARE_VERIFIER_COMMAND`
   at it (or a shim wrapping it).
 - Export the environment in the shell you launch `claude` from so the

@@ -1,15 +1,18 @@
 # adverserial (Python)
 
 Client-side verification SDK for Adverserial confidential-inference
-endpoints. See the [root README](../README.md) for the protocol and threat
-model. Dependencies: Python ≥ 3.10, stdlib + `cryptography` only.
+endpoints. See the [root README](../../README.md#what-ack-verifies-and-what-it-does-not)
+for what is and is not verified, and
+[attest-proxy](https://github.com/AdverserialAI/attest-proxy) for the server and
+its protocol. Dependencies: Python ≥ 3.10, the standard library, `cryptography`
+and `tinfoil-ehbp` (encrypted HTTP bodies).
 
 ```python
 from adverserial import verify_endpoint, VerifiedSession
 
 proof = verify_endpoint(
     "https://host/v1",
-    expected_model_id="lordx64/cyberglm",
+    expected_model_id="adverserial/cyberseek",
     trusted_receipt_keys={kid: jwk},
     issuer="https://verify.adverserial.ai",
     audience="https://chat.adverserial.ai",
@@ -22,35 +25,55 @@ resp = session.chat_completions(messages=[{"role": "user", "content": "hi"}])
 - `verify_endpoint(...)` → `VerifiedProof` or raises `VerificationError`.
 - `VerifiedSession` pins TLS to `proof.tls_spki_sha256`; a substituted
   certificate raises `TLSPinMismatchError` before any request bytes are sent.
+  The pin replaces CA validation: the TLS key is generated in the enclave
+  (in-enclave ACME in production) and trusted because the quote binds it.
+- When the evidence carries an EHBP key, request and response bodies are
+  encrypted to it and cannot be downgraded to plaintext. The enclave generates
+  that key afresh at every boot.
+- For `https://api.adverserial.ai` the policy at
+  `https://verify.adverserial.ai/policies/production.json` is fetched over HTTPS
+  and compared with the evidence. The policy is not signed; `trusted_receipt_keys`
+  is the only local trust anchor.
 - `proof.dev_mode == True` means synthetic evidence: plumbing, not hardware.
 - CLI: `python -m adverserial verify …` → see `--help`.
 
 ## Hardware evidence is mandatory
 
 `hardware_verifier` is required. It must independently verify the raw TEE and
-GPU evidence against your pinned policy; the endpoint's signed receipt is not
-hardware proof by itself. The callback makes the SDK model- and GPU-agnostic:
+GPU evidence against the published policy; the endpoint's signed receipt is not
+hardware proof by itself. `verify_endpoint` itself does not parse the TDX quote
+or the NVIDIA tokens: the quote signature, its `report_data`, the event-log
+replay and the GPU tokens are checked only by this callback. The callback makes the SDK model- and GPU-agnostic:
 it receives `(evidence, nonce, expected_model_id, expected_endpoint)` and must
 return `HardwareVerification(verified=True, verifier="...")`. Deployments
 should provide a reviewed vendor-verifier adapter, such as a DCAP-QVL/TDX
 verifier paired with the applicable GPU-attestation verifier.
 
-## Official hardware-verifier runner
+## Hardware-verifier commands
 
-Install the Python package and configure `adverserial-hardware-verify` as the
-gateway's `ADVERSERIAL_HARDWARE_VERIFIER_COMMAND`. It requires two absolute,
-independently reviewed adapter paths: `ADVERSERIAL_TDX_VERIFIER_COMMAND` and
-`ADVERSERIAL_GPU_VERIFIER_COMMAND`. Before either adapter runs, the runner
-recomputes TDX `report_data = SHA-256(nonce || TLS-SPKI-DER || receipt-SPKI-DER)
-|| 32 zero bytes`, validates the TLS public-key fingerprint, and canonicalizes
-the TDX event log and GPU-evidence digests. It accepts only adapter outputs
-that return those exact bindings. It rejects DEV_MODE and missing evidence.
+ACK and the gateway use the Node verifier shipped in this repository,
+`resources/typescript/adverserial-hardware-verify.mjs`, as
+`ADVERSERIAL_HARDWARE_VERIFIER_COMMAND`. It verifies the TDX quote with
+`@phala/dcap-qvl` (TCB status must be `UpToDate`), checks
+`report_data = SHA-256("adverserial-attestation-v2\0" || nonce || TLS-SPKI-DER || receipt-SPKI-DER || EHBP public key) || 32 zero bytes`,
+replays the event log against RTMR3, compares measurements with the published
+policy and verifies the NVIDIA NRAS tokens.
+
+This package also installs `adverserial-hardware-verify`, a Python runner that
+composes two adapters you supply: `ADVERSERIAL_TDX_VERIFIER_COMMAND` and
+`ADVERSERIAL_GPU_VERIFIER_COMMAND` (absolute paths). Before either adapter runs
+it validates the TLS public-key fingerprint and canonicalizes the TDX event log
+and GPU-evidence digests, and it accepts only adapter outputs that return those
+exact bindings. It rejects DEV_MODE and missing evidence. No adapters are
+shipped. The runner still expects the earlier `report_data` layout,
+`SHA-256(nonce || TLS-SPKI-DER || receipt-SPKI-DER) || 32 zero bytes`, without
+the EHBP key, so it rejects evidence from the current production service; use
+the Node verifier there.
 
 Adapters are deployment-specific by design; the package does not substitute a
 proxy receipt for Intel TDX/DCAP and GPU vendor verification. Their JSON input
-is documented in `adverserial.hardware_verifier`; a real production adapter
-must return a non-empty `verifier` name/version plus the verified binding
-fields.
+is documented in `adverserial.hardware_verifier`; an adapter must return a
+non-empty `verifier` name/version plus the verified binding fields.
 
 ## Per-request receipts (WP-7)
 
@@ -85,13 +108,28 @@ SHA-256 over the concatenated SSE data payloads — one leading space after
 `attestation_binding.tls_spki_sha256` against the live TLS pin. Any failure
 raises `VerificationError` — for streams it raises at end-of-iteration, after
 the content chunks (treat that as "the exchange failed verification"). A
-missing receipt is not fatal: `receipt_verified` is `False`.
+missing receipt is an error by default (`require_receipts=True`, which cannot be
+turned off for an EHBP-attested endpoint); with `require_receipts=False` on a
+legacy endpoint it is reported as `receipt_verified == False`.
 
 Receipt claims: `v:1`, `iss`, `aud`, `request_nonce`, `request_body_hash`,
 `response_hash`, `model_id`, `policy_id`,
 `attestation_binding: {tls_spki_sha256, evidence_digest}`, `iat`,
 `exp` (iat+120 s), and `usage {input_tokens, cached_tokens, output_tokens}`
 when the runtime reported usage.
+
+## Key rotation and enclave restarts
+
+`verify_endpoint` raises `ReceiptKeyNotPinnedError` (a `VerificationError`) when
+the attestation receipt is signed by a key that is not in `trusted_receipt_keys`
+— what a client sees after the service rotates its receipt key. The message says
+to re-pin from the published policy (`ack upgrade`, then `ack attestation`, then
+a new session); the SDK never adopts the new key itself. The receipt key is
+generated inside the enclave and changes only when the enclave's key state is
+rebuilt; the EHBP key changes at every boot. `VerifiedSession` raises `EHBPKeyMismatchError` (an
+`UpstreamHTTPError`, status 422) when the enclave reports that the request was
+sealed to an EHBP key it no longer holds. Call `verify_endpoint` again to obtain
+the current quote-bound key before retrying.
 
 ## Tests
 

@@ -10,7 +10,7 @@ Use this skill when the user asks Codex to use, configure, or assess an Adverser
 1. Run the bundled verifier before sending a prompt to a confidential endpoint. First use `adverserial-verify` if it is on `PATH`. Otherwise find the plugin bundle at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/adverserial/adverserial-verify/*/bin/adverserial-verify.mjs` and run it with `node`. It must emit a fresh, pinned hardware-verified verdict; do not infer a result from cached prose or a proxy response.
 2. A successful result requires all three checks: a pinned receipt key, fresh endpoint evidence, and an independent hardware verifier. Never treat TOFU, synthetic `dev=true` evidence, a proxy receipt by itself, or a missing hardware verifier as a verified TEE.
 3. If verification fails, explain the failed check and do not present the endpoint as confidential. The user can still explicitly choose the normal `https://api.adverserial.ai/v1` service, which is separate from the confidential route.
-4. Use canonical model IDs only: `adverserial/cyberseek` and `lordx64/cyberkimi`.
+4. Use the canonical model ID `adverserial/cyberseek`. CyberKimi and CyberGLM are available only on request.
 5. Keep API keys local. The confidential local gateway sends an API key to `billing.adverserial.ai` only to obtain a five-minute single-request entitlement. It must forward the entitlement, never the API key, to `api.adverserial.ai`.
 
 ## Required local configuration
@@ -24,7 +24,7 @@ export ADVERSERIAL_RECEIPT_KEYS_FILE="$HOME/.config/adverserial/receipt-keys.jso
 export ADVERSERIAL_HARDWARE_VERIFIER_COMMAND='/absolute/path/to/adverserial-hardware-verify'
 ```
 
-The key file and hardware verifier must come from the signed, published policy at `https://verify.adverserial.ai`. Do not substitute an untrusted URL or a shell command.
+The key file holds the receipt keys from the policy published at `https://verify.adverserial.ai` (`ack init` and `ack upgrade` write it); the policy is served over HTTPS and is not signed. The hardware verifier is the one installed with ACK. Do not substitute an untrusted URL or a shell command. If verification reports that the service rotated its keys, tell the user to run `ack upgrade`, then `ack attestation`, then start a new session.
 
 ## Security reporting
 
