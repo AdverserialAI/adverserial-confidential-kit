@@ -248,8 +248,9 @@ order by log time plus a per-release floor, and the Node verifier as the single
 enforcement point. `ack`, the hardware verifier that the gateway runs for
 every verification, and the bundled TypeScript SDK under Node all use
 `lib/policy-transparency.mjs`. The Python SDK has the same check as an optional
-extra (`pip install 'adverserial[transparency]'`, Python 3.11+) for standalone
-use. The verifier copies bundled inside the harness plugins do not check the
+extra (`pip install 'adverserial[transparency]'`, Python 3.11+, pinned to
+`sigstore==4.6.0`) for standalone use; it verifies offline against the same
+shipped trusted root, and CI runs its tests on Linux, macOS and Windows. The verifier copies bundled inside the harness plugins do not check the
 signature yet; in an `ack` session the policy they compare against has
 already been checked by `ack` and the hardware verifier.
 

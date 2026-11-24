@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -32,7 +33,10 @@ except ImportError:  # pragma: no cover
 KIT = Path(__file__).resolve().parents[3]
 FIXTURES = KIT / "test" / "fixtures" / "sigstore"
 ARTIFACT = (FIXTURES / "goreleaser-v2.20.3-checksums.txt").read_bytes()
-BUNDLE = (FIXTURES / "goreleaser-v2.20.3-checksums.txt.sigstore.json").read_text()
+# Bytes, as a client receives them. The bundle holds a literal em dash (the
+# Rekor checkpoint's signature line); decoding it with a platform default
+# encoding such as cp1252 corrupts the checkpoint.
+BUNDLE = (FIXTURES / "goreleaser-v2.20.3-checksums.txt.sigstore.json").read_bytes()
 FIXTURE_SIGNER = {
     "san": "https://github.com/goreleaser/goreleaser/.github/workflows/release.yml@refs/tags/v2.20.3",
     "issuer": "https://token.actions.githubusercontent.com",
@@ -45,7 +49,7 @@ FIXTURE_SIGNER = {
 }
 SIGNED_AT = "2026-11-20T04:21:30.000Z"
 URL = "https://verify.example.test/policies/production.json"
-SIGNED_SITE = {URL: ARTIFACT, URL + ".sigstore.json": BUNDLE.encode()}
+SIGNED_SITE = {URL: ARTIFACT, URL + ".sigstore.json": BUNDLE}
 
 
 def verify(artifact=ARTIFACT, bundle=BUNDLE, signer=FIXTURE_SIGNER, **extra):
@@ -78,8 +82,26 @@ class Refuses:
         self.assertEqual(caught.exception.code, code, str(caught.exception))
 
 
+def _no_network(*_args, **_kwargs):
+    raise AssertionError("policy signature verification must not open a network connection")
+
+
 @unittest.skipUnless(HAVE_SIGSTORE, "needs the 'transparency' extra (sigstore)")
 class SignatureTests(Refuses, unittest.TestCase):
+    def setUp(self):
+        # Verification is offline against the shipped trusted root: no TUF
+        # refresh, no Rekor or Fulcio lookup. Any attempt to connect fails the test.
+        patches = [mock.patch("socket.socket.connect", _no_network), mock.patch("socket.create_connection", _no_network), mock.patch("socket.getaddrinfo", _no_network)]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_a_bundle_decoded_with_the_wrong_encoding_is_not_silently_accepted_or_misreported(self):
+        # What a caller gets if it reads the bundle file as cp1252 text: the
+        # checkpoint no longer parses, so the result is a refusal, never a pass.
+        self.assertRefused("SIGNATURE", verify, bundle=BUNDLE.decode("cp1252"))
+        self.assertEqual(verify(bundle=BUNDLE.decode("utf-8"))["signedAt"], SIGNED_AT)
+
     def test_real_bundle_verifies_offline_against_the_shipped_root(self):
         result = verify()
         self.assertEqual(result["sha256"], "0cb9bc491aed89a6bed88d89a61cd0bbf97f30d0906ac6e99ecb5b2d9d4d6aaf")
@@ -117,7 +139,7 @@ class SignatureTests(Refuses, unittest.TestCase):
         def mutated(change):
             bundle = json.loads(BUNDLE)
             change(bundle)
-            return json.dumps(bundle)
+            return json.dumps(bundle, ensure_ascii=False).encode("utf-8")
 
         def signature(b): b["messageSignature"]["signature"] = flip(b["messageSignature"]["signature"])
         def proof(b): b["verificationMaterial"]["tlogEntries"][0]["inclusionProof"]["hashes"][0] = flip(b["verificationMaterial"]["tlogEntries"][0]["inclusionProof"]["hashes"][0])
@@ -131,16 +153,16 @@ class SignatureTests(Refuses, unittest.TestCase):
         bundle = json.loads(BUNDLE)
         del bundle["verificationMaterial"]["tlogEntries"][0]["inclusionProof"]
         with self.assertRaises(pt.PolicyTransparencyError) as caught:
-            verify(bundle=json.dumps(bundle))
+            verify(bundle=json.dumps(bundle).encode("utf-8"))
         self.assertIn(caught.exception.code, ("NOT_LOGGED", "BUNDLE_FORMAT"))
         self.assertRefused("BUNDLE_FORMAT", verify, bundle='{"not": "a bundle"}')
 
     def test_a_root_that_does_not_know_the_log_or_the_ca_refuses_the_bundle(self):
-        root = json.loads(pt.BUNDLED_TRUSTED_ROOT.read_text())
+        root = json.loads(pt.BUNDLED_TRUSTED_ROOT.read_bytes())
         with tempfile.TemporaryDirectory() as scratch:
             for removed in ("tlogs", "certificateAuthorities"):
                 path = Path(scratch) / f"no-{removed}.json"
-                path.write_text(json.dumps({**root, removed: []}))
+                path.write_text(json.dumps({**root, removed: []}), encoding="utf-8")
                 with self.subTest(removed=removed):
                     self.assertRefused("SIGNATURE", verify, trusted_root=path)
 
@@ -160,7 +182,7 @@ class SignatureTests(Refuses, unittest.TestCase):
     }
 
     def test_rekor_v2_bundle_verifies_with_time_from_the_timestamp_authority(self):
-        artifact, bundle, root = (self.V2 / "a.txt").read_bytes(), (self.V2 / "a.txt.sigstore.json").read_text(), self.V2 / "trusted_root.staging.json"
+        artifact, bundle, root = (self.V2 / "a.txt").read_bytes(), (self.V2 / "a.txt.sigstore.json").read_bytes(), self.V2 / "trusted_root.staging.json"
         result = verify(artifact, bundle, self.V2_SIGNER, trusted_root=root)
         self.assertEqual(result["log"][0]["kind"], "hashedrekord/0.0.2")
         self.assertRegex(result["signedAt"], r"^2025-06-12T12:0\d:\d\d\.000Z$")
@@ -170,7 +192,7 @@ class SignatureTests(Refuses, unittest.TestCase):
         self.assertRefused("WRONG_SIGNER", verify, artifact, bundle, {**self.V2_SIGNER, "trigger": "push"}, trusted_root=root)
 
     def test_staging_signature_is_refused_under_the_shipped_production_root(self):
-        self.assertRefused("SIGNATURE", verify, (self.V2 / "a.txt").read_bytes(), (self.V2 / "a.txt.sigstore.json").read_text(), self.V2_SIGNER)
+        self.assertRefused("SIGNATURE", verify, (self.V2 / "a.txt").read_bytes(), (self.V2 / "a.txt.sigstore.json").read_bytes(), self.V2_SIGNER)
 
     def test_fetch_accepts_pins_and_accepts_again(self):
         with tempfile.TemporaryDirectory() as home:
@@ -248,7 +270,7 @@ class RuleTests(Refuses, unittest.TestCase):
             self.assertRefused("PIN", pt.fetch_signed_policy, URL, state_dir=home, mode="enforce", fetch=site({URL: b"{}"}))
             warned = pt.fetch_signed_policy(URL, state_dir=home, mode="warn", fetch=site({URL: b"{}"}))
             self.assertIn("pin file is damaged", warned["warnings"][0])
-            self.assertEqual((Path(home) / "policy-pins.json").read_text(), "{broken")
+            self.assertEqual((Path(home) / "policy-pins.json").read_text(encoding="utf-8"), "{broken")
 
     def test_mode_and_constants_match_the_node_runtime(self):
         with tempfile.TemporaryDirectory() as home:
@@ -260,7 +282,7 @@ class RuleTests(Refuses, unittest.TestCase):
             (Path(home) / "policy-transparency-mode").write_text("enforce\n")
             self.assertEqual(pt.transparency_mode(env), "enforce")
             self.assertEqual(pt.transparency_mode({**env, "ACK_POLICY_TRANSPARENCY": "warn"}), "warn")
-        node = (KIT / "lib" / "policy-transparency.mjs").read_text()
+        node = (KIT / "lib" / "policy-transparency.mjs").read_text(encoding="utf-8")
         for value in list(pt.PRODUCTION_SIGNER.values()) + [pt.POLICY_FLOOR["signedAt"]]:
             self.assertIn(f"'{value}'", node)
         self.assertEqual(pt.BUNDLED_TRUSTED_ROOT.read_bytes(), (KIT / "resources" / "sigstore" / "trusted_root.json").read_bytes())

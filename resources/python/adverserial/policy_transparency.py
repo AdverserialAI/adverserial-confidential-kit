@@ -70,7 +70,7 @@ def transparency_mode(env: Optional[Mapping[str, str]] = None) -> str:
     value = env.get("ACK_POLICY_TRANSPARENCY")
     if not value:
         try:
-            value = (default_state_dir(env) / "policy-transparency-mode").read_text().strip()
+            value = (default_state_dir(env) / "policy-transparency-mode").read_text(encoding="utf-8").strip()
         except OSError:
             value = ""
     value = (value or DEFAULT_MODE).lower()
@@ -107,7 +107,12 @@ def verify_policy_signature(
     signer: Mapping[str, str] = PRODUCTION_SIGNER,
     trusted_root: str | os.PathLike[str] = BUNDLED_TRUSTED_ROOT,
 ) -> dict[str, Any]:
-    """Verify ``bundle_json`` over exactly ``policy_bytes``. Returns what was proven."""
+    """Verify ``bundle_json`` over exactly ``policy_bytes``. Returns what was proven.
+
+    Pass the bundle as the bytes that were served. If it is read from a file as
+    text, read it as UTF-8: the Rekor checkpoint inside contains a non-ASCII
+    character, and a platform default encoding corrupts it.
+    """
     try:
         from sigstore.errors import Error as SigstoreError
         from sigstore.models import Bundle, TrustedRoot
@@ -224,7 +229,7 @@ def read_pins(state_dir: Optional[os.PathLike[str] | str]) -> dict[str, Any]:
     if not state_dir:
         return {}
     try:
-        text = _pin_file(state_dir).read_text()
+        text = _pin_file(state_dir).read_text(encoding="utf-8")
     except FileNotFoundError:
         return {}
     try:
@@ -242,7 +247,7 @@ def write_pins(state_dir: os.PathLike[str] | str, pins: Mapping[str, Any]) -> No
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     handle, temporary = tempfile.mkstemp(dir=directory, prefix="policy-pins.", suffix=".tmp")
     try:
-        with os.fdopen(handle, "w") as stream:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
             stream.write(json.dumps(pins, indent=2) + "\n")
         os.chmod(temporary, 0o600)
         os.replace(temporary, _pin_file(directory))
